@@ -34,25 +34,30 @@ void loop()
   // turn it off, wait for it to go off, and then read it.  Then back
   // on and wait, then back off.
   static bool calibrated = false;
-  static int threshold = -1;
+  static int on_threshold = -1;
+  static int off_threshold = -1;
   if (!calibrated) {
     digitalWrite(LED_PIN, LOW);
-    delay(400);
+    delay(1000);
     int dark_value = analogRead(A0);
 
     digitalWrite(LED_PIN, HIGH);
-    delay(400);
+    delay(1000);
     int bright_value = analogRead(A0);
     
     digitalWrite(LED_PIN, LOW);
-    delay(400);
+    delay(1000);
     
     if (bright_value - dark_value < 100) {
       Serial.print("Not enough brightness difference, reposition photosensor to see LED\n");
     } else {
-      threshold = (dark_value + bright_value) / 2;
-      Serial.print("Calibrated: threshold = ");
-      Serial.print(threshold);
+      int tenth_gap = (bright_value - dark_value) / 10;
+      on_threshold = dark_value + tenth_gap;
+      off_threshold = bright_value - tenth_gap;
+      Serial.print("Calibrated: on threshold = ");
+      Serial.print(on_threshold);
+      Serial.print(", off threshold = ");
+      Serial.print(of_threshold);
       Serial.print(" (dark = ");
       Serial.print(dark_value);
       Serial.print(", bright = ");
@@ -109,7 +114,7 @@ void loop()
       case S_MEASURE_ON:
         // Wait until the LED passes threshold, then report how long it
         // took and wait a bit for the printing to happen.
-        if (analogRead(A0) > threshold) {
+        if (analogRead(A0) >= on_threshold) {
           unsigned long now = micros();
           unsigned long latency = now - start;
           Serial.print("On delay (microseconds) = ");
@@ -130,7 +135,7 @@ void loop()
       case S_MEASURE_OFF:
         // Wait until the LED passes threshold, then report how long it
         // took and wait it bit for the printing to happen.
-        if (analogRead(A0) < threshold) {
+        if (analogRead(A0) <= off_threshold) {
           unsigned long now = micros();
           unsigned long latency = now - start;
           Serial.print("Off delay (microseconds) = ");
