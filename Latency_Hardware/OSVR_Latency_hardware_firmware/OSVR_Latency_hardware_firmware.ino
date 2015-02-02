@@ -7,7 +7,9 @@
 // shield.  That source is available from Robogaia.com.
 
 // This code also uses information from the Blink example modified by Scott
-// Fitzgerald that came with with Arduino.
+// Fitzgerald that came with the Arduino.
+// This code uses information from the AnalogReadSerial example that
+// came with the Arduino.
 
 //some other examples for MPU6000 code
 //http://arduino.cc/en/Tutorial/BarometricPressureSensor
@@ -15,7 +17,9 @@
 
 /*
  Circuit:
- MPU6000 sensor attached to pins  10 - 13:
+ MPU6000 sensor attached to the SPI communications circuit using pins  10 - 13:
+ NOTE: Pin 13 is also the pin that controls the on-board LED, so it cannot be
+       used for LED indication when SPI communication is happening.
  CSB: pin 10
  MOSI: pin 11
  MISO: pin 12
@@ -80,6 +84,10 @@ const int READ_FLAG =0x80;   //128 has to be added to the address register
 #define BITS_FS_500DPS              0x08
 #define BITS_FS_1000DPS             0x10
 #define BITS_FS_2000DPS             0x18
+#define BITS_FS_2G                  0x00
+#define BITS_FS_4G                  0x08
+#define BITS_FS_8G                  0x10
+#define BITS_FS_16G                 0x18
 #define BITS_FS_MASK                0x18
 #define BITS_DLPF_CFG_256HZ_NOLPF2  0x00
 #define BITS_DLPF_CFG_188HZ         0x01
@@ -130,13 +138,7 @@ void setup()
 //*****************************************************
 {
   Serial.begin(9600);
-
-  pinMode(chipSelectPin, OUTPUT);
-  digitalWrite(chipSelectPin, HIGH);
   
-  // initialize digital pin 13 as an output.
-  pinMode(13, OUTPUT);  
- 
   MPU6000_Init();
   delay(100);
 }
@@ -187,20 +189,6 @@ void loop()
         //Serial.print(getTemperature());
  
         Serial.print("\r\n");
-
-     // Cause the light to blink.
-     static int loopcount = 0;
-     static bool light_on = false;
-     if (++loopcount == 10) {
-       if (light_on) {
-         digitalWrite(13, LOW);
-         light_on = false;
-       } else {
-         digitalWrite(13, HIGH);
-         light_on = true;
-       }
-       loopcount = 0;
-     }
 
      // Don't cycle too fast. 
      delay(100); 
@@ -301,7 +289,6 @@ unsigned int getTemperature(void)
 unsigned int readRegister(byte thisRegister) 
 //*****************************************************
 {
-  
   unsigned int result = 0;   // result to return
   byte addr = thisRegister + 0x80;
  // Serial.print(thisRegister, BIN);
@@ -346,8 +333,8 @@ void MPU6000_Init(void)
 //*************************************************
 {
     // MPU6000 chip select setup
-    // pinMode(MPU6000_CHIP_SELECT_PIN, OUTPUT);
-    // writeRegister(MPU6000_CHIP_SELECT_PIN, HIGH);
+    pinMode(chipSelectPin, OUTPUT);
+    digitalWrite(chipSelectPin, HIGH);
     
     // SPI initialization
     SPI.begin();
@@ -357,23 +344,46 @@ void MPU6000_Init(void)
     // Chip reset
     writeRegister(MPUREG_PWR_MGMT_1, BIT_H_RESET);
     delay(100);
+
     // Wake up device and select GyroZ clock (better performance)
     writeRegister(MPUREG_PWR_MGMT_1, MPU_CLK_SEL_PLLGYROZ);
     delay(1);
+
     // Disable I2C bus (recommended on datasheet)
     writeRegister(MPUREG_USER_CTRL, BIT_I2C_IF_DIS);
     delay(1);
-    // SAMPLE RATE
+
+    // Set the sampling rate.  We do this by setting the divisor on the rate,
+    // which has a base update rate of 1kHz.  The number we use here is added
+    // to 1 and then used as a divisor: Rate = 1Khz / (value + 1).  So a value
+    // of 0 is 1 kHz, a value of 4 is 200Hz, and a value of 19 is 50Hz.
+    // We want to sample as rapidly as possible, so that we have the minimum
+    // latency between motion and its detection.  Even at 1kHz, we're going to
+    // have some fraction of a second of latency on our reads.
     //MPU6000_SPI_write(MPUREG_SMPLRT_DIV,0x04);     // Sample rate = 200Hz    Fsample= 1Khz/(4+1) = 200Hz     
-    writeRegister(MPUREG_SMPLRT_DIV,19);     // Sample rate = 50Hz    Fsample= 1Khz/(19+1) = 50Hz     
+    //writeRegister(MPUREG_SMPLRT_DIV,19);     // Sample rate = 50Hz    Fsample= 1Khz/(19+1) = 50Hz     
+    writeRegister(MPUREG_SMPLRT_DIV,0);
     delay(1);
-    // FS & DLPF   FS=2000º/s, DLPF = 20Hz (low pass filter)
-    writeRegister(MPUREG_CONFIG, BITS_DLPF_CFG_20HZ);  
+
+    // Set the filter pass frequency on the low-pass filter to the maximum
+    // (no filter, corresponding to a 2.1Khz cutoff).
+    //writeRegister(MPUREG_CONFIG, BITS_DLPF_CFG_20HZ);
+    writeRegister(MPUREG_CONFIG, BITS_DLPF_CFG_2100HZ_NOLPF);
     delay(1);
-    writeRegister(MPUREG_GYRO_CONFIG,BITS_FS_2000DPS);  // Gyro scale 2000º/s
+    
+    // Set the measurement scale on the gyros and the accelerometers.
+    // From the data sheet: For precision tracking of both fast and slow
+    // motions, the parts feature a user-programmable gyroscope full-scale range
+    // of ±250, ±500, ±1000, and ±2000°/sec (dps) and a user-programmable accelerometer
+    // full-scale range of ±2g, ±4g, ±8g, and ±16g.
+    // We're looking for increased sensitivity, especially since we're only
+    // going to read the upper byte to ensure consistency.  This means that
+    // we set the values to the smallest full-scale range.
+    writeRegister(MPUREG_GYRO_CONFIG,BITS_FS_250DPS);
     delay(1);
-    writeRegister(MPUREG_ACCEL_CONFIG,0x08);            // Accel scale 4g (4096LSB/g)
+    writeRegister(MPUREG_ACCEL_CONFIG,BITS_FS_2G);
     delay(1);   
+
     // Oscillator set
     writeRegister(MPUREG_PWR_MGMT_1,MPU_CLK_SEL_PLLGYROZ);
     delay(1);
