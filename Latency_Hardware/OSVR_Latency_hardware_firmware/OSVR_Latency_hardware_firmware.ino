@@ -1,6 +1,6 @@
 // OSRVR latency-testing hardware firmware source code.
-// Author: Russell Taylor working for Sensics.com through Reliasolve.com
-// LICENSE: XXX
+// Author: Russell Taylor working for Sensics.com through ReliaSolve.com
+// LICENSE: Apache License 2.0.
 
 // This code is based on the "Accelerometer_Gyro_Shield_test" example from
 // Robogaia industries that ships along with their 6-axis Gyro/Accelerometer
@@ -104,40 +104,23 @@ const int READ_FLAG =0x80;   //128 has to be added to the address register
 
 // pins used for the connection with the sensor
 // the other you need are controlled by the SPI library):
-//const int dataReadyPin = 6;
 const int chipSelectPin = 10;
 
-
-////////////////////////////////////////////////////
-//Calibration values
-
- int xAccelerationGain=1;
- int xAccelerationOffset=0;
-
- int yAccelerationGain=1;
- int yAccelerationOffset=0;
-
- int zAccelerationGain=1;
- int zAccelerationOffset=0;
-
- int xGyroGain=1;
- int xGyroOffset=0;
-
- int yGyroGain=1;
- int yGyroOffset=0;
-
- int zGyroGain=1;
- int zGyroOffset=0;
-
-//end calibration values
-//////////////////////////////////////////////
-
+// Thresholds
+const int GYRO_THRESHOLD = 10;
+const int ACCEL_CHANGE_THRESHOLD = 10;
+const int BRIGHTNESS_CHANGE_THRESHOLD = 10;
+const unsigned long TIMEOUT_USEC = 1000000L;
 
 //*****************************************************
 void setup() 
 //*****************************************************
 {
   Serial.begin(9600);
+  Serial.print("OSVR_latency_hardware_firmware v01.00\n");
+  Serial.print(" Mount the photosensor rigidly on the screen.\n");
+  Serial.print(" Move the interial sensor along with the tracking hardware.\n");
+  Serial.print(" Make the app change the brightness in front of the photosensor.\n");
   
   MPU6000_Init();
   delay(100);
@@ -147,144 +130,125 @@ void setup()
 void loop() 
 //*****************************************************
 {
-        int xAccelerationValue;
-        int yAccelerationValue;
-        int zAccelerationValue;
-        
-        int xGyroValue;
-        int yGyroValue;
-        int zGyroValue;
-        
-        //the values received from MPU 6000 are raw and have to be calibrated
-        //we use a linear function y=mx +b to transform the raw counts to real 
-        //acceleration values  G   and rotations / sec rot gyros
-        // in this example the gain (m) and offset (x) are setup to m=1 and x=0 so there is no change in raw data
-        // 
-        
-        xAccelerationValue = xAccelerationGain * getXAccelerometerCounts()  +  xAccelerationOffset;  
-        Serial.print("AccelerationX= ");
-        Serial.print(xAccelerationValue);
-        
-        yAccelerationValue = yAccelerationGain * getYAccelerometerCounts()  +  yAccelerationOffset; 
-        Serial.print(" AccelerationY= ");
-        Serial.print(yAccelerationValue);
-        
-        zAccelerationValue = zAccelerationGain * getZAccelerometerCounts()  +  zAccelerationOffset;
-        Serial.print(" AccelerationZ= ");
-        Serial.print(zAccelerationValue);
-        
-        xGyroValue = xGyroGain * getXGyroCounts()  +  xGyroOffset;
-        Serial.print(" GyroX= ");
-        Serial.print(xGyroValue);
-        
-        yGyroValue = yGyroGain * getYGyroCounts()  +  yGyroOffset;
-        Serial.print(" GyroY= ");
-        Serial.print(yGyroValue);
-        
-        zGyroValue = zGyroGain * getZGyroCounts()  +  zGyroOffset;
-        Serial.print(" GyroZ= ");
-        Serial.print(zGyroValue);
-        
-        //Serial.print(" Temperature= ");
-        //Serial.print(getTemperature());
- 
-        Serial.print("\r\n");
-
-     // Don't cycle too fast. 
-     delay(100); 
-     
-}//end loop
-
-
-
-//*****************************************************
-int getXAccelerometerCounts(void)
-//*****************************************************
-{
-    int tempData_HI,tempData_LO;
-     //Read the  data
-    tempData_HI = readRegister(ACCEL_XOUT_H);
-    tempData_LO = readRegister(ACCEL_XOUT_L );
-    
-    return ((tempData_HI << 8) | tempData_LO);
-    
-}//end func
-
-//*****************************************************  
-int getYAccelerometerCounts(void)
-//*****************************************************
-{
-    int tempData_HI,tempData_LO;
-    
-    tempData_HI = readRegister(ACCEL_YOUT_H);
-    tempData_LO = readRegister(ACCEL_YOUT_L );
-    
-    return ((tempData_HI << 8) + tempData_LO);
-}//end func
+  // We run a finite-state machine that cycles through cases of waiting for
+  // a period of non motion, detecting a sudden motion, waiting until there
+  // is a change in brightness, and reporting the time passed in microseconds
+  // between the motion and the brightness change.
+  static enum { S_CALM, S_MOTION, S_BRIGHTNESS } state = S_CALM;
+  static unsigned long start;
+  static int initial_brightness;
   
-//*****************************************************  
-int getZAccelerometerCounts(void)
+  switch (state) {
+    case S_CALM:
+      {
+        // Wait for a period of at least 100 cycles where there is no motion above
+        // the motion threshold.
+        static int calm_cycles = 0;
+        if (moving()) {
+          calm_cycles = 0;
+        } if (++calm_cycles >= 100) {
+            state = S_MOTION;
+            calm_cycles = 0;
+        }
+      }
+      break;
+
+    case S_MOTION:
+      {
+        // Wait for a sudden motion.  When we find it, record the time in microseconds
+        // so we can compare it to when the brightness changes.  Also record the brightness
+        // so we can look for changes.
+        if (moving) {
+          start = micros();
+          initial_brightness = analogRead(A0);
+          state = S_BRIGHTNESS;
+        }
+      }
+      break;
+
+    case S_BRIGHTNESS:
+      {
+        // Wait for a change in brightness compared to the original value that
+        // passes a threshold.  When we get it, report the latency.
+        // If it takes too long, then we time out and start over.
+        int brightness = analogRead(A0);
+        unsigned long now = micros();
+        if (abs(brightness - initial_brightness > BRIGHTNESS_CHANGE_THRESHOLD)) {
+          Serial.print("Latency ");
+          Serial.print(now - start);
+          Serial.print(" usecs\n");
+          state = S_CALM;
+        } else if (now - start > TIMEOUT_USEC) {
+          Serial.print("Timeout: no brightness change after motion, restarting\n");
+          state = S_CALM;
+        }
+      }
+      break;
+   
+    default:
+      Serial.print("Error: Unrecognized state; restarting\n");
+      break;
+  }
+}
+
+
+// Determine whether we're undergoing acceleration or rotation.
+// Does this by comparing the gyros to a threshold and
+// comparing accelerations to see if they are changing.
+//*****************************************************
+inline bool moving(void)
 //*****************************************************
 {
-    int tempData_HI,tempData_LO;
-    
-    tempData_HI = readRegister(ACCEL_ZOUT_H );
-    tempData_LO = readRegister(ACCEL_ZOUT_L );
-    
-    return ((tempData_HI << 8) + tempData_LO);
-    
-}//end func
+  byte accX, accY, accZ;
+  byte gyroX, gyroY, gyroZ;
+  getAccelerometerAndGyroHighCounts(accX, accY, accZ, gyroX, gyroY, gyroZ);        
+  
+  // If the gyros are above threshold, then we're moving.
+  if (gyroX > GYRO_THRESHOLD) { return true; }
+  if (gyroY > GYRO_THRESHOLD) { return true; }
+  if (gyroZ > GYRO_THRESHOLD) { return true; }
+  
+  // See if the accelerations are sufficiently different from the
+  // ones we read last time.  If so, we're moving.
+  static int prevX = 0;
+  static int prevY = 0;
+  static int prevZ = 0;
+  bool ret = false;
+  if ( abs(accX - prevX) > ACCEL_CHANGE_THRESHOLD ) {
+    ret = true;
+  }
+  if ( abs(accY - prevY) > ACCEL_CHANGE_THRESHOLD ) {
+    ret = true;
+  }
+  if ( abs(accZ - prevZ) > ACCEL_CHANGE_THRESHOLD ) {
+    ret = true;
+  }
+  prevX = accX;
+  prevY = accY;
+  prevZ = accZ;
+
+  return ret;  
+}
 
 //*****************************************************
-int getXGyroCounts(void)
+  // We only read the high-order bytes for two reasons:
+  // 1) Speed.
+  // 2) To avoid getting a measurement whose upper and lower bytes are
+  // inconsisent.
+inline void getAccelerometerAndGyroHighCounts(byte &accX, byte &accY, byte &accZ,
+                                       byte &gyroX, byte &gyroY, byte &gyroZ)
 //*****************************************************
 {
-     int tempData_HI,tempData_LO;
-     
-     tempData_HI = readRegister(GYRO_XOUT_H );
-     tempData_LO = readRegister(GYRO_XOUT_L );
-     
-     return ((tempData_HI << 8) + tempData_LO);
-}//end func
-
-//*****************************************************
-int getYGyroCounts(void)
-//*****************************************************
-{
-     int tempData_HI,tempData_LO;
-     
-     tempData_HI = readRegister(GYRO_YOUT_H);
-     tempData_LO = readRegister(GYRO_YOUT_L );
-     
-     return ((tempData_HI << 8) + tempData_LO);
-}//end func  
-
-//*****************************************************
-int getZGyroCounts(void)
-//*****************************************************
-{
-     int tempData_HI,tempData_LO;
-     
-     tempData_HI = readRegister(GYRO_ZOUT_H);
-     tempData_LO = readRegister(GYRO_ZOUT_L);
-     
-     return ((tempData_HI << 8) + tempData_LO);
-}//end func 
-
-//*****************************************************
-unsigned int getTemperature(void)
-//*****************************************************
-{
-     int tempData_HI,tempData_LO;
-     
-     tempData_HI = readRegister(TEMP_OUT_H + READ_FLAG);
-     tempData_LO = readRegister(TEMP_OUT_L + READ_FLAG);
-     
-     return ((tempData_HI << 8) + tempData_LO);
-}//end func 
+    accX = readRegister(ACCEL_XOUT_H);
+    accY = readRegister(ACCEL_YOUT_H);
+    accZ = readRegister(ACCEL_ZOUT_H);
+    gyroX = readRegister(GYRO_XOUT_H);
+    gyroY = readRegister(GYRO_YOUT_H);
+    gyroZ = readRegister(GYRO_ZOUT_H);
+}
 
 
-//Read from or write to register
+//Read from register
 //*****************************************************
 unsigned int readRegister(byte thisRegister) 
 //*****************************************************
@@ -307,7 +271,7 @@ unsigned int readRegister(byte thisRegister)
 }
 
 
-//Sends a write command
+//Write to register
 //*****************************************************
 void writeRegister(byte thisRegister, byte thisValue) 
 //*****************************************************
@@ -360,14 +324,11 @@ void MPU6000_Init(void)
     // We want to sample as rapidly as possible, so that we have the minimum
     // latency between motion and its detection.  Even at 1kHz, we're going to
     // have some fraction of a second of latency on our reads.
-    //MPU6000_SPI_write(MPUREG_SMPLRT_DIV,0x04);     // Sample rate = 200Hz    Fsample= 1Khz/(4+1) = 200Hz     
-    //writeRegister(MPUREG_SMPLRT_DIV,19);     // Sample rate = 50Hz    Fsample= 1Khz/(19+1) = 50Hz     
     writeRegister(MPUREG_SMPLRT_DIV,0);
     delay(1);
 
     // Set the filter pass frequency on the low-pass filter to the maximum
     // (no filter, corresponding to a 2.1Khz cutoff).
-    //writeRegister(MPUREG_CONFIG, BITS_DLPF_CFG_20HZ);
     writeRegister(MPUREG_CONFIG, BITS_DLPF_CFG_2100HZ_NOLPF);
     delay(1);
     
