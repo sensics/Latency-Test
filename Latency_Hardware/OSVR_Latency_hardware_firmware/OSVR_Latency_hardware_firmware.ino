@@ -102,14 +102,18 @@ const int READ_FLAG =0x80;   //128 has to be added to the address register
 #define	BIT_RAW_RDY_EN		    0x01
 #define	BIT_I2C_IF_DIS              0x10
 
+
+#undef VERBOSE
+#undef VERBOSE2
+
 // pins used for the connection with the sensor
 // the other you need are controlled by the SPI library):
 const int chipSelectPin = 10;
 
 // Thresholds
-const int GYRO_THRESHOLD = 10;
-const int ACCEL_CHANGE_THRESHOLD = 10;
-const int BRIGHTNESS_CHANGE_THRESHOLD = 10;
+const int GYRO_THRESHOLD = 300;
+const int ACCEL_CHANGE_THRESHOLD = 500;
+const int BRIGHTNESS_CHANGE_THRESHOLD = 5;
 const unsigned long TIMEOUT_USEC = 1000000L;
 
 //*****************************************************
@@ -144,11 +148,14 @@ void loop()
         // Wait for a period of at least 100 cycles where there is no motion above
         // the motion threshold.
         static int calm_cycles = 0;
-        if (moving()) {
+        if (moving2()) {
           calm_cycles = 0;
-        } if (++calm_cycles >= 100) {
+        } if (++calm_cycles >= 50) {
             state = S_MOTION;
             calm_cycles = 0;
+        } else {
+          // Make sure we stay calm for a while (half a second)
+          delay(10);
         }
       }
       break;
@@ -158,10 +165,13 @@ void loop()
         // Wait for a sudden motion.  When we find it, record the time in microseconds
         // so we can compare it to when the brightness changes.  Also record the brightness
         // so we can look for changes.
-        if (moving) {
+        if (moving2()) {
           start = micros();
           initial_brightness = analogRead(A0);
           state = S_BRIGHTNESS;
+#ifdef VERBOSE
+          Serial.print("Moving\n");
+#endif
         }
       }
       break;
@@ -173,7 +183,7 @@ void loop()
         // If it takes too long, then we time out and start over.
         int brightness = analogRead(A0);
         unsigned long now = micros();
-        if (abs(brightness - initial_brightness > BRIGHTNESS_CHANGE_THRESHOLD)) {
+        if (abs(brightness - initial_brightness) > BRIGHTNESS_CHANGE_THRESHOLD) {
           Serial.print("Latency ");
           Serial.print(now - start);
           Serial.print(" usecs\n");
@@ -201,7 +211,7 @@ inline bool moving(void)
 {
   byte accX, accY, accZ;
   byte gyroX, gyroY, gyroZ;
-  getAccelerometerAndGyroHighCounts(accX, accY, accZ, gyroX, gyroY, gyroZ);        
+  getAccelerometerAndGyroHighCounts(accX, accY, accZ, gyroX, gyroY, gyroZ);
   
   // If the gyros are above threshold, then we're moving.
   if (gyroX > GYRO_THRESHOLD) { return true; }
@@ -230,11 +240,95 @@ inline bool moving(void)
   return ret;  
 }
 
+// Determine whether we're undergoing acceleration or rotation.
+// Does this by comparing the gyros to a threshold and
+// comparing accelerations to see if they are changing.
+//*****************************************************
+inline bool moving2(void)
+//*****************************************************
+{
+  bool ret = false;
+  
+  int accX, accY, accZ;
+  int gyroX, gyroY, gyroZ;
+  accX = getXAccelerometerCounts();
+  accY = getYAccelerometerCounts();
+  accZ = getZAccelerometerCounts();
+  gyroX = getXGyroCounts();
+  gyroY = getYGyroCounts();
+  gyroZ = getZGyroCounts();
+  
+#ifdef VERBOSE2
+  /* Debugging info to help figure out what the thresholds should be */
+  Serial.print(" "); Serial.print(accX);
+  Serial.print(" "); Serial.print(accY);
+  Serial.print(" "); Serial.print(accZ);
+  Serial.print(", "); Serial.print(gyroX);
+  Serial.print(" "); Serial.print(gyroY);
+  Serial.print(" "); Serial.print(gyroZ);
+  Serial.print(", "); Serial.print(analogRead(A0));
+  Serial.print("\n");
+  delay(1000);
+#endif
+  
+  // If the gyros are above threshold, then we're moving.
+  if (gyroX > GYRO_THRESHOLD) {
+#ifdef VERBOSE
+    Serial.print("gX\n");
+#endif
+    ret = true;
+  }
+  if (gyroY > GYRO_THRESHOLD) {
+#ifdef VERBOSE
+    Serial.print("gY\n");
+#endif
+    ret = true;
+  }
+  if (gyroZ > GYRO_THRESHOLD) {
+#ifdef VERBOSE
+    Serial.print("gZ\n");
+#endif
+    ret = true;
+  }
+  
+  // See if the accelerations are sufficiently different from the
+  // ones we read last time.  If so, we're moving.
+  static int prevX = 0;
+  static int prevY = 0;
+  static int prevZ = 0;
+  if ( abs(accX - prevX) > ACCEL_CHANGE_THRESHOLD ) {
+#ifdef VERBOSE
+    Serial.print("aX\n");
+#endif
+    ret = true;
+  }
+  if ( abs(accY - prevY) > ACCEL_CHANGE_THRESHOLD ) {
+#ifdef VERBOSE
+    Serial.print("aY\n");
+#endif
+    ret = true;
+  }
+  if ( abs(accZ - prevZ) > ACCEL_CHANGE_THRESHOLD ) {
+#ifdef VERBOSE
+    Serial.print("aZ\n");
+#endif
+    ret = true;
+  }
+  prevX = accX;
+  prevY = accY;
+  prevZ = accZ;
+
+  return ret;  
+}
+
 //*****************************************************
   // We only read the high-order bytes for two reasons:
   // 1) Speed.
   // 2) To avoid getting a measurement whose upper and lower bytes are
   // inconsisent.
+  // XXX However, this routine did not work.  It is not clear why it
+  // did not, but switching back to using the original read routines
+  // through the moving2() call.
 inline void getAccelerometerAndGyroHighCounts(byte &accX, byte &accY, byte &accZ,
                                        byte &gyroX, byte &gyroY, byte &gyroZ)
 //*****************************************************
@@ -246,6 +340,80 @@ inline void getAccelerometerAndGyroHighCounts(byte &accX, byte &accY, byte &accZ
     gyroY = readRegister(GYRO_YOUT_H);
     gyroZ = readRegister(GYRO_ZOUT_H);
 }
+
+//*****************************************************
+int getXAccelerometerCounts(void)
+//*****************************************************
+{
+    int tempData_HI,tempData_LO;
+     //Read the  data
+    tempData_HI = readRegister(ACCEL_XOUT_H);
+    tempData_LO = readRegister(ACCEL_XOUT_L );
+    
+    return ((tempData_HI << 8) | tempData_LO);
+    
+}//end func
+
+//*****************************************************  
+int getYAccelerometerCounts(void)
+//*****************************************************
+{
+    int tempData_HI,tempData_LO;
+    
+    tempData_HI = readRegister(ACCEL_YOUT_H);
+    tempData_LO = readRegister(ACCEL_YOUT_L );
+    
+    return ((tempData_HI << 8) + tempData_LO);
+}//end func
+  
+//*****************************************************  
+int getZAccelerometerCounts(void)
+//*****************************************************
+{
+    int tempData_HI,tempData_LO;
+    
+    tempData_HI = readRegister(ACCEL_ZOUT_H );
+    tempData_LO = readRegister(ACCEL_ZOUT_L );
+    
+    return ((tempData_HI << 8) + tempData_LO);
+    
+}//end func
+
+//*****************************************************
+int getXGyroCounts(void)
+//*****************************************************
+{
+     int tempData_HI,tempData_LO;
+     
+     tempData_HI = readRegister(GYRO_XOUT_H );
+     tempData_LO = readRegister(GYRO_XOUT_L );
+     
+     return ((tempData_HI << 8) + tempData_LO);
+}//end func
+
+//*****************************************************
+int getYGyroCounts(void)
+//*****************************************************
+{
+     int tempData_HI,tempData_LO;
+     
+     tempData_HI = readRegister(GYRO_YOUT_H);
+     tempData_LO = readRegister(GYRO_YOUT_L );
+     
+     return ((tempData_HI << 8) + tempData_LO);
+}//end func  
+
+//*****************************************************
+int getZGyroCounts(void)
+//*****************************************************
+{
+     int tempData_HI,tempData_LO;
+     
+     tempData_HI = readRegister(GYRO_ZOUT_H);
+     tempData_LO = readRegister(GYRO_ZOUT_L);
+     
+     return ((tempData_HI << 8) + tempData_LO);
+}//end func 
 
 
 //Read from register
@@ -337,12 +505,10 @@ void MPU6000_Init(void)
     // motions, the parts feature a user-programmable gyroscope full-scale range
     // of ±250, ±500, ±1000, and ±2000°/sec (dps) and a user-programmable accelerometer
     // full-scale range of ±2g, ±4g, ±8g, and ±16g.
-    // We're looking for increased sensitivity, especially since we're only
-    // going to read the upper byte to ensure consistency.  This means that
-    // we set the values to the smallest full-scale range.
-    writeRegister(MPUREG_GYRO_CONFIG,BITS_FS_250DPS);
+    // We set the sensitivity to match the example app, which got good full-scale results.
+    writeRegister(MPUREG_GYRO_CONFIG,BITS_FS_2000DPS);
     delay(1);
-    writeRegister(MPUREG_ACCEL_CONFIG,BITS_FS_2G);
+    writeRegister(MPUREG_ACCEL_CONFIG,BITS_FS_4G);
     delay(1);   
 
     // Oscillator set
