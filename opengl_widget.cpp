@@ -43,7 +43,7 @@ OpenGL_Widget::OpenGL_Widget(QWidget *parent)
     d_frame_count = 0;
 
     // Initial target radius is 5 pixels.
-    d_r = 5;
+    d_r = 12;
 
     // Initial clear color is black;
     d_clearColor = Qt::black;
@@ -133,7 +133,7 @@ void OpenGL_Widget::paintGL()
     glEnd();
 
     glColor3f(1,1,1);
-    renderText(30, 30, "OSVR 2D vs. 3D rendering latency test program version 01.00.00 (run with -fullscreen to remove borders)");
+    renderText(30, 30, "OSVR 2D vs. 3D rendering latency test program version 01.01.00 (run with -fullscreen to remove borders)");
     renderText(50, 50, "Press + to increase oscillation");
     renderText(50, 70, "Press - to decrease oscillation");
     renderText(50, 90, "Until you find the slowest oscillation where the cursor and square are in phase");

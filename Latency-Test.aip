@@ -6,10 +6,10 @@
     <ROW Property="ALLUSERS" Value="1"/>
     <ROW Property="ARPCOMMENTS" Value="This installer database contains the logic and data required to install [|ProductName]." ValueLocId="*"/>
     <ROW Property="Manufacturer" Value="Sensics"/>
-    <ROW Property="ProductCode" Value="1033:{1A715094-009E-4C8C-B40F-A97DA055EDCE} " Type="16"/>
+    <ROW Property="ProductCode" Value="1033:{BFC99F85-D71F-44BF-8075-273A868F320C} " Type="16"/>
     <ROW Property="ProductLanguage" Value="1033"/>
     <ROW Property="ProductName" Value="Latency_test"/>
-    <ROW Property="ProductVersion" Value="1.0.0" Type="32"/>
+    <ROW Property="ProductVersion" Value="1.1.0" Type="32"/>
     <ROW Property="SecureCustomProperties" Value="OLDPRODUCTS;AI_NEWERPRODUCTFOUND"/>
     <ROW Property="UpgradeCode" Value="{893ABCCD-5F5A-4417-886E-667C2EC6CEEB}"/>
     <ROW Property="WindowsType9X" MultiBuildValue="DefaultBuild:Windows 9x/ME" ValueLocId="-"/>
@@ -26,18 +26,18 @@
     <ROW Directory="platforms_Dir" Directory_Parent="APPDIR" DefaultDir="PLATFO~1|platforms"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiCompsComponent">
-    <ROW Component="Latencytest.exe" ComponentId="{49D21EE2-95FD-4B06-BDC1-1D3B3951728C}" Directory_="APPDIR" Attributes="256" KeyPath="Latencytest.exe"/>
-    <ROW Component="ProductInformation" ComponentId="{1F113DE5-8F0B-419F-ACED-F899EBC57195}" Directory_="APPDIR" Attributes="4" KeyPath="Version"/>
-    <ROW Component="Qt5Core.dll" ComponentId="{D80FA2EA-B341-45C9-BFCD-D64980F380B4}" Directory_="APPDIR" Attributes="256" KeyPath="Qt5Core.dll"/>
-    <ROW Component="Qt5Gui.dll" ComponentId="{A21227F1-020F-4FE0-9FF9-24704D417A4F}" Directory_="APPDIR" Attributes="256" KeyPath="Qt5Gui.dll"/>
-    <ROW Component="Qt5OpenGL.dll" ComponentId="{D8A96EF6-B488-4037-9842-BAB6A525B7F4}" Directory_="APPDIR" Attributes="256" KeyPath="Qt5OpenGL.dll"/>
-    <ROW Component="Qt5Widgets.dll" ComponentId="{6D0F30A7-BD0A-420D-9820-01E81069ED3F}" Directory_="APPDIR" Attributes="256" KeyPath="Qt5Widgets.dll"/>
-    <ROW Component="SHORTCUTDIR" ComponentId="{1BD3C6FE-D1CD-4DED-93D0-61F40C5AF293}" Directory_="SHORTCUTDIR" Attributes="0"/>
-    <ROW Component="icudt53.dll" ComponentId="{C05F7188-BDA2-4C1B-A0FD-61FC8A9BBA79}" Directory_="APPDIR" Attributes="256" KeyPath="icudt53.dll"/>
-    <ROW Component="icuin53.dll" ComponentId="{31547A51-78E9-4D46-A767-33DC59B92433}" Directory_="APPDIR" Attributes="256" KeyPath="icuin53.dll"/>
-    <ROW Component="icuuc53.dll" ComponentId="{60B24194-C342-4B70-8FDF-82B6ECDB8FFC}" Directory_="APPDIR" Attributes="256" KeyPath="icuuc53.dll"/>
-    <ROW Component="libEGL.dll" ComponentId="{40679119-0871-49B4-85FE-9B8F5460318F}" Directory_="APPDIR" Attributes="256" KeyPath="libEGL.dll"/>
-    <ROW Component="qwindows.dll" ComponentId="{5A135B2E-B997-4A70-AE7E-CA0CECD299B9}" Directory_="platforms_Dir" Attributes="256" KeyPath="qwindows.dll"/>
+    <ROW Component="Latencytest.exe" ComponentId="{D401121C-0D25-4966-8CB7-D9BED485CF04}" Directory_="APPDIR" Attributes="256" KeyPath="Latencytest.exe"/>
+    <ROW Component="ProductInformation" ComponentId="{E618E478-8281-44C2-B993-6EE9804FB526}" Directory_="APPDIR" Attributes="4" KeyPath="Version"/>
+    <ROW Component="Qt5Core.dll" ComponentId="{C9C82BD3-3BD1-4662-834C-5E9E530935BA}" Directory_="APPDIR" Attributes="256" KeyPath="Qt5Core.dll"/>
+    <ROW Component="Qt5Gui.dll" ComponentId="{B689614F-AF7E-4968-967C-90AF526C08E8}" Directory_="APPDIR" Attributes="256" KeyPath="Qt5Gui.dll"/>
+    <ROW Component="Qt5OpenGL.dll" ComponentId="{38E7DB91-308C-4B93-8D0A-91EBFDF53713}" Directory_="APPDIR" Attributes="256" KeyPath="Qt5OpenGL.dll"/>
+    <ROW Component="Qt5Widgets.dll" ComponentId="{7795CDE2-3D01-4CED-AA19-E8B2038A4160}" Directory_="APPDIR" Attributes="256" KeyPath="Qt5Widgets.dll"/>
+    <ROW Component="SHORTCUTDIR" ComponentId="{CAC5006A-C21B-4C14-A8E6-EC9B9A7A3D36}" Directory_="SHORTCUTDIR" Attributes="0"/>
+    <ROW Component="icudt53.dll" ComponentId="{E1653F14-312A-4F8F-8D57-03F5AF34C76B}" Directory_="APPDIR" Attributes="256" KeyPath="icudt53.dll"/>
+    <ROW Component="icuin53.dll" ComponentId="{40E11C46-185E-4713-92D4-3D28ADC22B0A}" Directory_="APPDIR" Attributes="256" KeyPath="icuin53.dll"/>
+    <ROW Component="icuuc53.dll" ComponentId="{68007EAC-4BA3-4C8C-A7DA-3547293C40CC}" Directory_="APPDIR" Attributes="256" KeyPath="icuuc53.dll"/>
+    <ROW Component="libEGL.dll" ComponentId="{E05E2CCE-7FC2-449E-A6DD-D200364EDABA}" Directory_="APPDIR" Attributes="256" KeyPath="libEGL.dll"/>
+    <ROW Component="qwindows.dll" ComponentId="{E6C8E4FB-0DCA-49FE-B266-240A008E26FC}" Directory_="platforms_Dir" Attributes="256" KeyPath="qwindows.dll"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.MsiFeatsComponent">
     <ROW Feature="MainFeature" Title="MainFeature" Description="Description" Display="1" Level="1" Directory_="APPDIR" Attributes="0" Components="Latencytest.exe ProductInformation Qt5Core.dll Qt5Gui.dll Qt5OpenGL.dll Qt5Widgets.dll SHORTCUTDIR icudt53.dll icuin53.dll icuuc53.dll libEGL.dll qwindows.dll"/>
@@ -56,7 +56,7 @@
     <ROW File="qwindows.dll" Component_="qwindows.dll" FileName="qwindows.dll" Attributes="0" SourcePath="C:\Qt\5.4\msvc2013_64\plugins\platforms\qwindows.dll" SelfReg="false"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.BuildComponent">
-    <ROW BuildKey="DefaultBuild" BuildName="DefaultBuild" BuildOrder="1" BuildType="0" PackageFolder="." PackageFileName="sensics_latency_test_v01_00_00" Languages="en" InstallationType="4" UseLargeSchema="true" MsiPackageType="x64"/>
+    <ROW BuildKey="DefaultBuild" BuildName="DefaultBuild" BuildOrder="1" BuildType="0" PackageFolder="." PackageFileName="sensics_latency_test_v01_01_00" Languages="en" InstallationType="4" UseLargeSchema="true" MsiPackageType="x64"/>
     <ATTRIBUTE name="CurrentBuild" value="DefaultBuild"/>
   </COMPONENT>
   <COMPONENT cid="caphyon.advinst.msicomp.DictionaryComponent">
