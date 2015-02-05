@@ -8,7 +8,7 @@
 
 QT       += core gui opengl widgets
 
-TARGET = calibration
+TARGET = Latency-test
 TEMPLATE = app
 
 # Avoid some warnings on Windows

@@ -133,7 +133,7 @@ void OpenGL_Widget::paintGL()
     glEnd();
 
     glColor3f(1,1,1);
-    renderText(30, 30, "OSVR 2D vs. 3D rendering latency test program version 1.0 (run with -fullscreen to remove borders)");
+    renderText(30, 30, "OSVR 2D vs. 3D rendering latency test program version 01.00.00 (run with -fullscreen to remove borders)");
     renderText(50, 50, "Press + to increase oscillation");
     renderText(50, 70, "Press - to decrease oscillation");
     renderText(50, 90, "Until you find the slowest oscillation where the cursor and square are in phase");
