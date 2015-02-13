@@ -1,6 +1,6 @@
-// OSRVR latency-testing hardware firmware source code.
+// OSRVR Photosensor latency-testing hardware firmware source code.
 // Author: Russell Taylor working for Sensics.com through Reliasolve.com
-// LICENSE: XXX
+// LICENSE: Apache 2.0.
 
 // This is a separate program that uses the on-board LED combined with
 // the analog input to check how long it takes the Arduino to detect
@@ -57,7 +57,7 @@ void loop()
       Serial.print("Calibrated: on threshold = ");
       Serial.print(on_threshold);
       Serial.print(", off threshold = ");
-      Serial.print(of_threshold);
+      Serial.print(off_threshold);
       Serial.print(" (dark = ");
       Serial.print(dark_value);
       Serial.print(", bright = ");

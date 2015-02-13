@@ -113,7 +113,7 @@ const int chipSelectPin = 10;
 // Thresholds
 const int GYRO_THRESHOLD = 300;
 const int ACCEL_CHANGE_THRESHOLD = 500;
-const int BRIGHTNESS_CHANGE_THRESHOLD = 5;
+const int BRIGHTNESS_CHANGE_THRESHOLD = 3;
 const unsigned long TIMEOUT_USEC = 1000000L;
 
 //*****************************************************
@@ -121,10 +121,11 @@ void setup()
 //*****************************************************
 {
   Serial.begin(9600);
-  Serial.print("OSVR_latency_hardware_firmware v01.00\n");
+  Serial.print("OSVR_latency_hardware_firmware v02.01.00\n");
   Serial.print(" Mount the photosensor rigidly on the screen.\n");
   Serial.print(" Move the interial sensor along with the tracking hardware.\n");
   Serial.print(" Make the app change the brightness in front of the photosensor.\n");
+  Serial.print(" Latencies reported in microseconds, 1-second timeout\n");
   
   MPU6000_Init();
   delay(100);
@@ -184,9 +185,8 @@ void loop()
         int brightness = analogRead(A0);
         unsigned long now = micros();
         if (abs(brightness - initial_brightness) > BRIGHTNESS_CHANGE_THRESHOLD) {
-          Serial.print("Latency ");
           Serial.print(now - start);
-          Serial.print(" usecs\n");
+          Serial.print("\n");
           state = S_CALM;
         } else if (now - start > TIMEOUT_USEC) {
           Serial.print("Timeout: no brightness change after motion, restarting\n");
@@ -317,6 +317,7 @@ inline bool moving2(void)
   prevX = accX;
   prevY = accY;
   prevZ = accZ;
+#undef VERBOSE
 
   return ret;  
 }
