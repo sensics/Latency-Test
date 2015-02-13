@@ -133,16 +133,22 @@ void OpenGL_Widget::paintGL()
     glEnd();
 
     glColor3f(1,1,1);
-    renderText(30, 30, "OSVR 2D vs. 3D rendering latency test program version 01.01.00 (run with -fullscreen to remove borders)");
+    renderText(30, 30, "OSVR 2D vs. 3D rendering latency test program version 01.02.00 (run with -fullscreen to remove borders)");
     renderText(50, 50, "Press + to increase oscillation");
     renderText(50, 70, "Press - to decrease oscillation");
     renderText(50, 90, "Until you find the slowest oscillation where the cursor and square are in phase");
+
+    renderText(50,110, "Press o to toggle oscillation");
+    renderText(50,130, "Press ESC/q to quit");
+    renderText(50,150, "Left mouse button drags square when not oscillating");
+    renderText(50,170, "Middle mouse button teleports mouse when not oscillating");
+    renderText(50,190, "Right mouse button toggles background brightness");
 
     double latency = (d_oscillate_phase/360) / (d_oscillate_freq);
     double latency_ms = latency * 1000;
     std::stringstream msg;
     msg << "Latency = " << latency_ms << "ms, Phase = " << d_oscillate_phase << " degrees";
-    renderText(50,130, msg.str().c_str());
+    renderText(50,220, msg.str().c_str());
 
     if (++d_frame_count == 30) {
         double now = d_osc_time.elapsed() / 1000.0;
@@ -153,11 +159,7 @@ void OpenGL_Widget::paintGL()
         d_last_frame_time = now;
         d_frame_count = 0;
     }
-    renderText(50,150, d_frame_msg.c_str());
-
-    renderText(50,200, "Press o to toggle oscillation");
-    renderText(50,220, "Press ESC/q to quit");
-    renderText(50,240, "Left mouse button drags square when not oscillating");
+    renderText(50,240, d_frame_msg.c_str());
 }
 
 void OpenGL_Widget::resizeGL(int width, int height)
@@ -218,8 +220,20 @@ void OpenGL_Widget::keyPressEvent(QKeyEvent *event)
 
 void OpenGL_Widget::mousePressEvent(QMouseEvent *event)
 {
+    if (event->button() == Qt::LeftButton) {
+        // Invert the mouse y position because the coordinates are
+        // upside down in OpenGL compared to the mouse.
+        d_x = event->x();
+        d_y = d_height - event->y();
+    }
     if (event->button() == Qt::RightButton) {
         d_clearColor = Qt::white;
+    }
+    if (event->button() == Qt::MiddleButton) {
+        QPoint newPos = event->pos();
+        newPos.setX(newPos.x() - 50);
+        newPos.setY(newPos.y() - 50);
+        QCursor::setPos(QWidget::mapToGlobal(newPos));
     }
     updateGL();
 }
@@ -229,18 +243,22 @@ void OpenGL_Widget::mouseReleaseEvent(QMouseEvent *event)
     if (event->button() == Qt::RightButton) {
         d_clearColor = Qt::black;
     }
+    if (event->button() == Qt::MiddleButton) {
+        QPoint newPos = event->pos();
+        newPos.setX(newPos.x() + 50);
+        newPos.setY(newPos.y() + 50);
+        QCursor::setPos(QWidget::mapToGlobal(newPos));
+    }
     updateGL();
 }
 
 void OpenGL_Widget::mouseMoveEvent(QMouseEvent *event)
 {
-    // Invert the mouse y position because the coordinates are
-    // upside down in OpenGL compared to the mouse.
-    d_x = event->x();
-    d_y = d_height - event->y();
-
     if (event->buttons() & Qt::LeftButton) {
-        // XXX
+        // Invert the mouse y position because the coordinates are
+        // upside down in OpenGL compared to the mouse.
+        d_x = event->x();
+        d_y = d_height - event->y();
     } else if (event->buttons() & Qt::RightButton) {
         // XXX
     }
