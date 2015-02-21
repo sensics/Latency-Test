@@ -28,13 +28,24 @@
 #include <sstream>
 #include <math.h>
 #include <stdio.h>
+#include <quat.h>
 
 #ifndef GL_MULTISAMPLE
 #define GL_MULTISAMPLE  0x809D
 #endif
 
 //----------------------------------------------------------------------
+// File-scoped globals
+
+// Minimum interval between analog and tracker trigger events.
+static const double ANALOG_DELAY = 0.5;
+static const double TRACKER_DELAY = 0.5;
+
+//----------------------------------------------------------------------
 // Helper functions
+
+//----------------------------------------------------------------------
+// Member functions
 
 OpenGL_Widget::OpenGL_Widget(QWidget *parent)
     : QGLWidget(QGLFormat(QGL::SampleBuffers), parent)
@@ -56,20 +67,58 @@ OpenGL_Widget::OpenGL_Widget(QWidget *parent)
 
     // Call the timer that will cause OpenGL to draw
     // faster than the maximum display update rate.
-    connect(&d_timer,SIGNAL(timeout()),this,SLOT(oscillate()));
+    connect(&d_timer,SIGNAL(timeout()),this,SLOT(idle()));
     d_osc_time.start();
     d_timer.start();
 
     // Set a cursor that is symmetric around its center.
     this->setCursor(Qt::CrossCursor);
+
+	// Initialize 
+	d_button = NULL;
+	d_analog = NULL;
+	d_tracker = NULL;
 }
 
 OpenGL_Widget::~OpenGL_Widget()
 {
+    if (d_button != NULL) { delete d_button; }
+    if (d_analog != NULL) { delete d_analog; }
+    if (d_tracker != NULL) { delete d_tracker; }
 }
 
-void OpenGL_Widget::oscillate(void)
+void OpenGL_Widget::useVRPNButton(QString name, int which)
 {
+	d_button = new vrpn_Button_Remote(name.toStdString().c_str());
+	d_button->register_change_handler(this, handleButton);
+	d_button_to_use = which;
+}
+
+void OpenGL_Widget::useVRPNAnalog(QString name, int which, double threshold)
+{
+    d_analog = new vrpn_Analog_Remote(name.toStdString().c_str());
+    d_analog->register_change_handler(this, handleAnalog);
+    d_analog_to_use = which;
+    d_analog_threshold = threshold;
+    d_analog_last_trigger.tv_sec = 0;
+    d_analog_last_trigger.tv_sec = 0;
+}
+
+void OpenGL_Widget::useVRPNTracker(QString name, int sensor, double transThresh, double rotThresh)
+{
+    d_tracker = new vrpn_Tracker_Remote(name.toStdString().c_str());
+    d_tracker->register_change_handler(this, handleTracker, sensor);
+    d_tracker_trans_thresh = transThresh;
+    d_tracker_rot_thresh = rotThresh;
+    d_tracker_last_trigger.tv_sec = 0;
+    d_tracker_last_trigger.tv_sec = 0;
+}
+
+void OpenGL_Widget::idle(void)
+{
+    if (d_button != NULL) { d_button->mainloop(); }
+    if (d_analog != NULL) { d_analog->mainloop(); }
+    if (d_tracker != NULL) { d_tracker->mainloop(); }
     updateGL();
 }
 
@@ -129,7 +178,7 @@ void OpenGL_Widget::paintGL()
     // Draw instructions on the screen.  This will provide additional rendering load,
     // but it did not change the results in our early testing.
     glColor3f(1,1,1);
-    renderText(30, 30, "OSVR 2D vs. 3D rendering latency test program version 01.02.01 (run with -fullscreen to remove borders)");
+    renderText(30, 30, "OSVR 2D vs. 3D rendering latency test program version 02.00.00 (run with -fullscreen to remove borders)");
     renderText(50, 50, "Press + to increase oscillation");
     renderText(50, 70, "Press - to decrease oscillation");
     renderText(50, 90, "Until you find the slowest oscillation where the cursor and square are in phase");
@@ -258,4 +307,111 @@ void OpenGL_Widget::mouseMoveEvent(QMouseEvent *event)
     } else if (event->buttons() & Qt::RightButton) {
     }
     updateGL();
+}
+
+void VRPN_API OpenGL_Widget::handleButton(void *userdata, vrpn_BUTTONCB info)
+{
+    OpenGL_Widget *me = static_cast<OpenGL_Widget*>(userdata);
+
+    if (info.button == me->d_button_to_use) {
+        if (info.state == 1) {
+            // Just pressed our button, turn the background white.
+            me->d_clearColor = Qt::white;
+        }
+        else {
+            // Just released the button, turn the background black
+            me->d_clearColor = Qt::black;
+        }
+    }
+}
+
+void VRPN_API OpenGL_Widget::handleAnalog(void *userdata, vrpn_ANALOGCB info)
+{
+    OpenGL_Widget *me = static_cast<OpenGL_Widget*>(userdata);
+
+    vrpn_float64 value = info.channel[me->d_analog_to_use];
+    struct timeval now;
+    vrpn_gettimeofday(&now, NULL);
+
+    // If we haven't yet had an analog value set (time = 0),
+    // don't check for changes, just update the value and
+    // store the time we got it.
+    if (me->d_analog_last_trigger.tv_sec == 0) {
+        me->d_last_analog_value = value;
+        me->d_analog_last_trigger = now;
+        return;
+    }
+
+    // If it hasn't been long enough since our last trigger, just
+    // store the value and return.
+    if (vrpn_TimevalDurationSeconds(now, me->d_analog_last_trigger) < ANALOG_DELAY) {
+        me->d_last_analog_value = value;
+        return;
+    }
+
+    // See if the specified analog value has changed by more than the
+    // threshold amount.  If so, toggle the background color and store
+    // the new value we're comparing against.  Also record the time so
+    // we will wait long enough before triggering again.
+    if (fabs(value - me->d_last_analog_value) > me->d_analog_threshold) {
+        me->d_last_analog_value = value;
+        me->d_analog_last_trigger = now;
+        if (me->d_clearColor == Qt::black) {
+            me->d_clearColor = Qt::white;
+        }
+        else {
+            me->d_clearColor = Qt::black;
+        }
+    }
+}
+
+void VRPN_API OpenGL_Widget::handleTracker(void *userdata, vrpn_TRACKERCB info)
+{
+    OpenGL_Widget *me = static_cast<OpenGL_Widget*>(userdata);
+
+    struct timeval now;
+    vrpn_gettimeofday(&now, NULL);
+
+    // If we haven't yet had a value set (time = 0),
+    // don't check for changes, just update the location and
+    // store the time we got it.
+    if (me->d_tracker_last_trigger.tv_sec == 0) {
+        memcpy(me->d_tracker_last_pos, info.pos, sizeof(me->d_tracker_last_pos));
+        memcpy(me->d_tracker_last_quat, info.quat, sizeof(me->d_tracker_last_quat));
+        me->d_tracker_last_trigger = now;
+        return;
+    }
+
+    // If it hasn't been long enough since our last trigger, just
+    // store the value and return.
+    if (vrpn_TimevalDurationSeconds(now, me->d_tracker_last_trigger) < TRACKER_DELAY) {
+        memcpy(me->d_tracker_last_pos, info.pos, sizeof(me->d_tracker_last_pos));
+        memcpy(me->d_tracker_last_quat, info.quat, sizeof(me->d_tracker_last_quat));
+        return;
+    }
+
+    // See if the position or rotation has changed by more than the
+    // threshold amount.  If so, toggle the background color and store
+    // the new value we're comparing against.  Also record the time so
+    // we will wait long enough before triggering again.
+    double deltaPos = q_vec_distance(info.pos, me->d_tracker_last_pos);
+    double x, y, z, angle;
+    q_type invert_old;
+    q_invert(invert_old, me->d_tracker_last_quat);
+    q_type composed;
+    q_mult(composed, info.quat, invert_old);
+    q_to_axis_angle(&x, &y, &z, &angle, composed);
+    double deltaRot = fabs(angle);
+    if ((deltaPos > me->d_tracker_trans_thresh) ||
+        (deltaRot > me->d_tracker_rot_thresh)) {
+        memcpy(me->d_tracker_last_pos, info.pos, sizeof(me->d_tracker_last_pos));
+        memcpy(me->d_tracker_last_quat, info.quat, sizeof(me->d_tracker_last_quat));
+        me->d_tracker_last_trigger = now;
+        if (me->d_clearColor == Qt::black) {
+            me->d_clearColor = Qt::white;
+        }
+        else {
+            me->d_clearColor = Qt::black;
+        }
+    }
 }

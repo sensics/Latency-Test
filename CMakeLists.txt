@@ -38,6 +38,8 @@ set(CMAKE_AUTOMOC ON)
 find_package(Qt5Widgets REQUIRED)
 find_package(Qt5OpenGL REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(VRPN REQUIRED)
+INCLUDE_DIRECTORIES(${QUATLIB_INCLUDE_DIR} ${VRPN_INCLUDE_DIR})
 
 if(MSVC)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
@@ -53,19 +55,15 @@ qt5_wrap_ui(UI_HEADERS mainwindow.ui)
 
 add_executable(Latency_test ${SOURCES} ${UI_HEADERS})
 
-target_link_libraries(Latency_test Qt5::Widgets Qt5::OpenGL ${OPENGL_LIBRARIES})
+target_link_libraries(Latency_test
+    Qt5::Widgets
+    Qt5::OpenGL
+    ${OPENGL_LIBRARIES}
+    ${VRPN_LIBRARIES} ${QUATLIB_LIBRARIES})
 install(TARGETS Latency_test
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 set(deps Qt5::Core Qt5::Gui Qt5::Widgets Qt5::OpenGL)
-
-#if(TARGET GLEW::GLEW_static)
-#    target_link_libraries(Latency_test GLEW::GLEW_static)
-#elseif(TARGET GLEW::GLEW)
-#    target_link_libraries(Latency_test GLEW::GLEW)
-#    list(APPEND deps GLEW::GLEW)
-#endif()
-
 foreach(dep ${deps})
     copy_imported_targets(Latency_test ${dep})
     install_imported_target(${dep} DESTINATION ${CMAKE_INSTALL_BINDIR})

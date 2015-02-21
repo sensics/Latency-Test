@@ -21,6 +21,9 @@
 #include <QGLWidget>
 #include <QTimer>
 #include <QTime>
+#include <vrpn_Button.h>
+#include <vrpn_Analog.h>
+#include <vrpn_Tracker.h>
 
 class OpenGL_Widget : public QGLWidget
 {
@@ -31,8 +34,14 @@ public:
     ~OpenGL_Widget();
 
 public slots:
-    // Called when nothing else is happening.
-    void oscillate(void);
+	// Listen to a VRPN device with the specified name and
+    // use the specified input to flash the background.
+	void useVRPNButton(QString name, int which);
+    void useVRPNAnalog(QString name, int which, double threshold);
+    void useVRPNTracker(QString name, int sensor, double transThresh, double rotThresh);
+
+    // Called from within the class when nothing else is happening.
+    void idle(void);
 
 signals:
 
@@ -65,4 +74,24 @@ private:
     double  d_last_frame_time;  //< Last time we started rendering
     unsigned d_frame_count;     //< So we average frame rates
     std::string d_frame_msg;    //< Message use to store the frame rate.
+
+	// Objects needed to be able to connect to a VRPN device.
+	vrpn_Button_Remote *d_button;   //< If we are using a VRPN button, non-null
+	int d_button_to_use;
+	vrpn_Analog_Remote *d_analog;   //< If we are using a VRPN analog, non-null
+	int d_analog_to_use;
+    vrpn_float64 d_last_analog_value; //< Last analog value we read
+    vrpn_float64 d_analog_threshold;  //< Threshold value triggering a change
+    struct timeval d_analog_last_trigger;   //< When did we last trigger?
+	vrpn_Tracker_Remote *d_tracker; //< If we are using a VRPN tracker, non-null
+    double d_tracker_trans_thresh;  //< Threshold of translation to trigger
+    double d_tracker_rot_thresh;    //< Threshold of rotation to trigger.
+    vrpn_float64 d_tracker_last_pos[3]; //< Last location of the tracker
+    vrpn_float64 d_tracker_last_quat[4]; //< Last orientation of the tracker
+    struct timeval d_tracker_last_trigger;   //< When did we last trigger?
+
+	// Callback handlers for the VRPN devices.
+	static void VRPN_API handleButton(void *userdata, vrpn_BUTTONCB info);
+	static void VRPN_API handleAnalog (void *userdata, vrpn_ANALOGCB info);
+	static void VRPN_API handleTracker(void *userdata, vrpn_TRACKERCB info);
 };

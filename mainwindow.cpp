@@ -2,9 +2,13 @@
 #include "ui_mainwindow.h"
 #include <QDesktopWidget>
 
-MainWindow::MainWindow(bool fullscreen, QWidget *parent) :
-    QMainWindow(parent),
-    ui(new Ui::MainWindow)
+MainWindow::MainWindow(bool fullscreen
+    , QString buttonName, int whichButton
+    , QString analogName, int whichAnalog, double anaThresh
+    , QString trackerName, int whichSensor, double transThresh, double rotThresh
+    , QWidget *parent)
+  : QMainWindow(parent)
+    , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
 
@@ -23,6 +27,17 @@ MainWindow::MainWindow(bool fullscreen, QWidget *parent) :
         this->showFullScreen();
         this->move(QPoint(screenres.x(), screenres.y()));
         this->resize(screenres.width(), screenres.height());
+    }
+
+    // Set up the VRPN devices if we've been asked to.
+    if (buttonName.length() > 0) {
+        ui->widget->useVRPNButton(buttonName, whichButton);
+    }
+    if (analogName.length() > 0) {
+        ui->widget->useVRPNAnalog(analogName, whichAnalog, anaThresh);
+    }
+    if (trackerName.length() > 0) {
+        ui->widget->useVRPNTracker(trackerName, whichSensor, transThresh, rotThresh);
     }
 }
 
