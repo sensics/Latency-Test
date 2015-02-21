@@ -56,21 +56,16 @@ OpenGL_Widget::OpenGL_Widget(QWidget *parent)
 
     // Call the timer that will cause OpenGL to draw
     // faster than the maximum display update rate.
-    QTimer* d_timer = new QTimer(NULL);
-    connect(d_timer,SIGNAL(timeout()),this,SLOT(oscillate()));
+    connect(&d_timer,SIGNAL(timeout()),this,SLOT(oscillate()));
     d_osc_time.start();
-    d_timer->start();
+    d_timer.start();
 
     // Set a cursor that is symmetric around its center.
-    QCursor c;
-    c.setShape(Qt::CrossCursor);
-    this->setCursor(c);
+    this->setCursor(Qt::CrossCursor);
 }
 
 OpenGL_Widget::~OpenGL_Widget()
 {
-    //Deleting this timer here causes a seg fault
-    // delete d_timer;
 }
 
 void OpenGL_Widget::oscillate(void)
@@ -85,20 +80,24 @@ void OpenGL_Widget::initializeGL()
     glShadeModel(GL_SMOOTH);
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
-    //glEnable(GL_MULTISAMPLE);
-    glDisable(GL_MULTISAMPLE);
     static GLfloat lightPosition[4] = { 0.5, 5.0, 7.0, 1.0 };
     glLightfv(GL_LIGHT0, GL_POSITION, lightPosition);
+    glDisable(GL_MULTISAMPLE);
 
     // Makes the colors for the primitives be what we want.
+    glDisable(GL_BLEND);
+    glDisable(GL_TEXTURE_2D);
     glDisable(GL_LIGHTING);
 }
 
 void OpenGL_Widget::paintGL()
 {
     if (d_oscillate) {
-        // Figure out the new location in the oscillation and move
-        // the cursor and display
+        // Figure out the new location in the oscillation.  Move both
+        // the cursor and the displayed box to their respective locations.
+        // Call code to move the cursor here.  Put this code immediately
+        // before the 3D rendering loop so there is not additional latency
+        // due to intervening operations.
         double ms = d_osc_time.elapsed();
         double sec = ms / 1000;
         int x = d_width / 2 + d_oscillate_mag * cos(sec * (2* M_PI * d_oscillate_freq));
@@ -118,12 +117,7 @@ void OpenGL_Widget::paintGL()
     glLoadIdentity();
     glTranslatef(0.0, 0.0, -10.0);
 
-    // Set up rendering state.
-    glDisable(GL_BLEND);
-    glEnable(GL_DEPTH_TEST);
-    glDisable(GL_TEXTURE_2D);
-
-    // Draw a square at a location that depends on the mouse
+    // Draw a square box at the specified coordinates.
     glColor3f(1,0,0);
     glBegin(GL_QUADS);
         glVertex2d(d_x - d_r, d_y - d_r);
@@ -132,8 +126,10 @@ void OpenGL_Widget::paintGL()
         glVertex2d(d_x - d_r, d_y + d_r);
     glEnd();
 
+    // Draw instructions on the screen.  This will provide additional rendering load,
+    // but it did not change the results in our early testing.
     glColor3f(1,1,1);
-    renderText(30, 30, "OSVR 2D vs. 3D rendering latency test program version 01.02.00 (run with -fullscreen to remove borders)");
+    renderText(30, 30, "OSVR 2D vs. 3D rendering latency test program version 01.02.01 (run with -fullscreen to remove borders)");
     renderText(50, 50, "Press + to increase oscillation");
     renderText(50, 70, "Press - to decrease oscillation");
     renderText(50, 90, "Until you find the slowest oscillation where the cursor and square are in phase");
@@ -260,7 +256,6 @@ void OpenGL_Widget::mouseMoveEvent(QMouseEvent *event)
         d_x = event->x();
         d_y = d_height - event->y();
     } else if (event->buttons() & Qt::RightButton) {
-        // XXX
     }
     updateGL();
 }

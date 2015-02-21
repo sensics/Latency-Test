@@ -56,7 +56,7 @@ private:
 
     QColor  d_clearColor;   //< Color to clear the background to
 
-    QTimer* d_timer;            //< Timer to use to cause oscillation
+    QTimer  d_timer;            //< Timer to use to cause oscillation
     bool    d_oscillate;        //< Should we be oscillating the cursor/display?
     double  d_oscillate_freq;   //< Cycles/second to oscillate cursor/display
     double  d_oscillate_phase;  //< Phase (in degrees) of the oscillation
