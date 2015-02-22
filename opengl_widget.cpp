@@ -78,7 +78,12 @@ OpenGL_Widget::OpenGL_Widget(QWidget *parent)
     d_button = NULL;
     d_analog = NULL;
     d_tracker = NULL;
+
+    // Initialize the vertex array based on the number of
+    // quads;
     d_num_quads = 1;
+    d_vertex_array = NULL;
+    updateVertexArray();
 }
 
 OpenGL_Widget::~OpenGL_Widget()
@@ -167,18 +172,19 @@ void OpenGL_Widget::paintGL()
     glLoadIdentity();
     glTranslatef(0.0, 0.0, -10.0);
 
+    // Translate and scale so that a quad from -1 to 1 in X and Y will
+    // render correctly.  This lets us re-use our vertex array and not have
+    // to change it every frame.
+    glTranslatef(d_x, d_y, 0);
+    glScalef(d_r, d_r, 0);
+
     // Draw a square box at the specified coordinates.
     // Overdraw this as many times as we are asked to draw quads.
-    // XXX Replace this with a pre-allocated vertex array.
     glColor3f(1,0,0);
-    glBegin(GL_QUADS);
-      for (int i = 0; i < d_num_quads; i++) {
-        glVertex2d(d_x - d_r, d_y - d_r);
-        glVertex2d(d_x + d_r, d_y - d_r);
-        glVertex2d(d_x + d_r, d_y + d_r);
-        glVertex2d(d_x - d_r, d_y + d_r);
-      }
-    glEnd();
+    glEnableClientState( GL_VERTEX_ARRAY );
+    glVertexPointer( 3, GL_FLOAT, 0, d_vertex_array );
+    glDrawArrays( GL_TRIANGLES, 0, d_num_quads * 6 );
+    glDisableClientState( GL_VERTEX_ARRAY );
 
     // Draw instructions on the screen.  This will provide additional rendering load,
     // but it did not change the results in our early testing.
@@ -426,4 +432,41 @@ void VRPN_API OpenGL_Widget::handleTracker(void *userdata, vrpn_TRACKERCB info)
 void OpenGL_Widget::setNumQuads(int num)
 {
     d_num_quads = num;
+    updateVertexArray();
 }
+
+// Delete any old array and make a new one based on the size.
+// Fill it with two triangles per quad that together fill the
+// region -1 to 1 in X and Y.  Make as many quads as we've been
+// asked to.
+
+void OpenGL_Widget::updateVertexArray(void)
+{
+    // It is safe to call delete[] on a NULL pointer.
+    // Resize our buffer to suit.
+    delete [] d_vertex_array;
+    d_vertex_array = new GLfloat[d_num_quads * 3 * 6];
+
+    // Fill in the buffer with the appropriate coordinates.
+    for (int i = 0; i < d_num_quads; i++) {
+        GLfloat *base = &d_vertex_array[i*3*6];
+
+        // Make sure we get the order right, so that we get
+        // front-facing triangles.
+
+        // First coordinate, first triangle (X, Y, Z)
+        *(base++) = -1; (*base++) = -1; *(base++) = 0;
+        // Second coordinate, first triangle
+        *(base++) =  1; (*base++) =  1; *(base++) = 0;
+        // Third coordinate, first triangle
+        *(base++) = -1; (*base++) =  1; *(base++) = 0;
+
+        // First coordinate, second triangle (X, Y, Z)
+        *(base++) =  1; (*base++) =  1; *(base++) = 0;
+        // Second coordinate, second triangle
+        *(base++) = -1; (*base++) = -1; *(base++) = 0;
+        // Third coordinate, second triangle
+        *(base++) =  1; (*base++) = -1; *(base++) = 0;
+    }
+}
+
