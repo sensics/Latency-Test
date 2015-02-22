@@ -4,10 +4,11 @@
 
 static void usage(std::string name)
 {
-    std::cerr << "Usage: " << name << " [-fullscreen]" <<
-        " [-button vrpnDeviceName whichButton]" <<
-        " [-analog vrpnDeviceName whichAnalog threshold]" <<
-        " [-tracker vrpnDeviceName whichSensor translationThreshold rotationThreshold]"
+    std::cerr << "Usage: " << name << " [-fullscreen]"
+        << " [-button vrpnDeviceName whichButton]"
+        << " [-analog vrpnDeviceName whichAnalog threshold]"
+        << " [-tracker vrpnDeviceName whichSensor translationThreshold rotationThreshold]"
+        << " [-numquads num]"
         << std::endl;
     exit(-1);
 }
@@ -22,6 +23,7 @@ int main(int argc, char *argv[])
     std::string buttonName, analogName, trackerName;
     int whichButton, whichAnalog, whichSensor;
     double analogThreshold, transThreshold, rotThreshold;
+    int numQuads = -1; //-1 is invalid, so uses the default
     for (int i = 1; i < argc; i++) {
         if (std::string("-fullscreen") == argv[i]) {
             do_fullscreen = true;
@@ -50,6 +52,10 @@ int main(int argc, char *argv[])
             if (++i >= argc) { usage(argv[0]); }
             rotThreshold = atof(argv[i]);
         }
+        else if (std::string("-numquads") == argv[i]) {
+            if (++i >= argc) { usage(argv[0]); }
+            numQuads = atoi(argv[i]);
+        }
         else if (argv[i][0] == '-') {
             usage(argv[0]);
         }
@@ -65,6 +71,7 @@ int main(int argc, char *argv[])
     }
 
     MainWindow w(do_fullscreen
+        , numQuads
         , buttonName.c_str(), whichButton
         , analogName.c_str(), whichAnalog, analogThreshold
         , trackerName.c_str(), whichSensor, transThreshold, rotThreshold);

@@ -3,6 +3,7 @@
 #include <QDesktopWidget>
 
 MainWindow::MainWindow(bool fullscreen
+    , int numQuads
     , QString buttonName, int whichButton
     , QString analogName, int whichAnalog, double anaThresh
     , QString trackerName, int whichSensor, double transThresh, double rotThresh
@@ -38,6 +39,9 @@ MainWindow::MainWindow(bool fullscreen
     }
     if (trackerName.length() > 0) {
         ui->widget->useVRPNTracker(trackerName, whichSensor, transThresh, rotThresh);
+    }
+    if (numQuads > 0) {
+        ui->widget->setNumQuads(numQuads);
     }
 }
 

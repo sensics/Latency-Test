@@ -74,10 +74,11 @@ OpenGL_Widget::OpenGL_Widget(QWidget *parent)
     // Set a cursor that is symmetric around its center.
     this->setCursor(Qt::CrossCursor);
 
-	// Initialize 
-	d_button = NULL;
-	d_analog = NULL;
-	d_tracker = NULL;
+    // Initialize VRPN objects and other things set by slots.
+    d_button = NULL;
+    d_analog = NULL;
+    d_tracker = NULL;
+    d_num_quads = 1;
 }
 
 OpenGL_Widget::~OpenGL_Widget()
@@ -167,12 +168,16 @@ void OpenGL_Widget::paintGL()
     glTranslatef(0.0, 0.0, -10.0);
 
     // Draw a square box at the specified coordinates.
+    // Overdraw this as many times as we are asked to draw quads.
+    // XXX Replace this with a pre-allocated vertex array.
     glColor3f(1,0,0);
     glBegin(GL_QUADS);
+      for (int i = 0; i < d_num_quads; i++) {
         glVertex2d(d_x - d_r, d_y - d_r);
         glVertex2d(d_x + d_r, d_y - d_r);
         glVertex2d(d_x + d_r, d_y + d_r);
         glVertex2d(d_x - d_r, d_y + d_r);
+      }
     glEnd();
 
     // Draw instructions on the screen.  This will provide additional rendering load,
@@ -199,12 +204,14 @@ void OpenGL_Widget::paintGL()
         double now = d_osc_time.elapsed() / 1000.0;
         double duration = now - d_last_frame_time;
         msg.str("");
+        msg << "Rendering " << d_num_quads << " quads; ";
         msg << "Frame rate = " << d_frame_count/duration << " Hz";
         d_frame_msg = msg.str();
         d_last_frame_time = now;
         d_frame_count = 0;
     }
     renderText(50,240, d_frame_msg.c_str());
+
 }
 
 void OpenGL_Widget::resizeGL(int width, int height)
@@ -414,4 +421,9 @@ void VRPN_API OpenGL_Widget::handleTracker(void *userdata, vrpn_TRACKERCB info)
             me->d_clearColor = Qt::black;
         }
     }
+}
+
+void OpenGL_Widget::setNumQuads(int num)
+{
+    d_num_quads = num;
 }

@@ -40,6 +40,9 @@ public slots:
     void useVRPNAnalog(QString name, int which, double threshold);
     void useVRPNTracker(QString name, int sensor, double transThresh, double rotThresh);
 
+    // Sets the number of quads that are drawn during a frame render.
+    void setNumQuads(int num);
+
     // Called from within the class when nothing else is happening.
     void idle(void);
 
@@ -64,6 +67,8 @@ private:
     float d_r;              //< Radius of the target
 
     QColor  d_clearColor;   //< Color to clear the background to
+
+    int     d_num_quads;    //< How many quadrilateras to draw in the scene
 
     QTimer  d_timer;            //< Timer to use to cause oscillation
     bool    d_oscillate;        //< Should we be oscillating the cursor/display?
