@@ -102,7 +102,6 @@ const int READ_FLAG =0x80;   //128 has to be added to the address register
 #define	BIT_RAW_RDY_EN		    0x01
 #define	BIT_I2C_IF_DIS              0x10
 
-
 #undef VERBOSE
 #undef VERBOSE2
 
@@ -116,12 +115,17 @@ const int ACCEL_CHANGE_THRESHOLD = 500;
 const int BRIGHTNESS_CHANGE_THRESHOLD = 3;
 const unsigned long TIMEOUT_USEC = 1000000L;
 
+// Keeps track of delays so we can do an average.
+const int NUM_DELAYS = 16;
+unsigned long delays[NUM_DELAYS];
+static int count = 0, odd_count = 0, even_count = 0;        
+
 //*****************************************************
 void setup() 
 //*****************************************************
 {
   Serial.begin(9600);
-  Serial.print("OSVR_latency_hardware_firmware v02.01.00\n");
+  Serial.print("OSVR_latency_hardware_firmware v03.00.00\n");
   Serial.print(" Mount the photosensor rigidly on the screen.\n");
   Serial.print(" Move the interial sensor along with the tracking hardware.\n");
   Serial.print(" Make the app change the brightness in front of the photosensor.\n");
@@ -184,13 +188,53 @@ void loop()
         // If it takes too long, then we time out and start over.
         int brightness = analogRead(A0);
         unsigned long now = micros();
+        
+        // Keep track of how many values we got for odd and even rows and
+        // compute a running average when we get a full complement for each.
+        // Ignore timeout values
         if (abs(brightness - initial_brightness) > BRIGHTNESS_CHANGE_THRESHOLD) {
+          // Print the result for this time
           Serial.print(now - start);
           Serial.print("\n");
+          if (count % 2 == 0) {
+            odd_count++;  // This is the first one (zero indexed) or off by twos
+          } else {
+            even_count++;
+          }
+          delays[count++] = now - start;
           state = S_CALM;
         } else if (now - start > TIMEOUT_USEC) {
           Serial.print("Timeout: no brightness change after motion, restarting\n");
+          // We don't increment the counter and we set the reading to 0 so we ignore it.
+          delays[count++] = 0;
           state = S_CALM;
+        }
+
+        // See if it is time to print the average result.          
+        if (count == NUM_DELAYS) {
+          unsigned long even_average = 0;
+          unsigned long odd_average = 0;
+          for (int i = 0; i < NUM_DELAYS/2; i++) {
+            odd_average += delays[2*i];
+            even_average += delays[2*i+1];
+          }
+          
+          odd_average /= odd_count;
+          Serial.print("Average of last ");
+          Serial.print(NUM_DELAYS/2);
+          Serial.print(" odd counts (ignoring timeouts) = ");
+          Serial.print(odd_average);
+          Serial.print("\n");
+          even_average /= even_count;
+          Serial.print("Average of last ");
+          Serial.print(NUM_DELAYS/2);
+          Serial.print(" even counts (ignoring timeouts) = ");
+          Serial.print(even_average);
+          Serial.print("\n");
+          
+          count = 0;
+          odd_count = 0;
+          even_count = 0;
         }
       }
       break;
