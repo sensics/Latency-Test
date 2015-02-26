@@ -1,4 +1,5 @@
 // OSRVR latency-testing hardware firmware source code.
+// Code for "motion turn-around" test.
 // Author: Russell Taylor working for Sensics.com through ReliaSolve.com
 // LICENSE: Apache License 2.0.
 
@@ -110,26 +111,25 @@ const int READ_FLAG =0x80;   //128 has to be added to the address register
 const int chipSelectPin = 10;
 
 // Thresholds
-const int GYRO_THRESHOLD = 300;
 const int ACCEL_CHANGE_THRESHOLD = 500;
-const int BRIGHTNESS_CHANGE_THRESHOLD = 3;
-const unsigned long TIMEOUT_USEC = 1000000L;
-
-// Keeps track of delays so we can do an average.
-const int NUM_DELAYS = 16;
-unsigned long delays[NUM_DELAYS];
-static int count = 0, odd_count = 0, even_count = 0;        
+const int GYRO_THRESHOLD = 300;
+const int BRIGHTNESS_THRESHOLD = 3;
+const int GYRO_CALIBRATION_THRESHOLD = 1000;
+const int BRIGHTNESS_CALIBRATION_THRESHOLD = 10;
+const unsigned long TIMEOUT_USEC = 2000000L;
+const unsigned long CALIBRATE_USEC = 1000000L;
 
 //*****************************************************
 void setup() 
 //*****************************************************
 {
   Serial.begin(9600);
-  Serial.print("OSVR_latency_hardware_firmware v03.00.00\n");
-  Serial.print(" Mount the photosensor rigidly on the screen.\n");
-  Serial.print(" Move the interial sensor along with the tracking hardware.\n");
-  Serial.print(" Make the app change the brightness in front of the photosensor.\n");
-  Serial.print(" Latencies reported in microseconds, 1-second timeout\n");
+  Serial.print("OSVR_latency_hardware_firmware turnaround test v01.00.00\n");
+  Serial.print(" Mount the photosensor rigidly on the eyepiece or screen.\n");
+  Serial.print(" Rotate the inertial sensor along with the tracking hardware.\n");
+  Serial.print(" Make the app change very brightness darker in one direction and lighter in the other.\n");
+  Serial.print(" Latencies reported in microseconds, 2-second timeout\n");
+  Serial.print(" Hold the device still for 2 seconds.\n");
   
   MPU6000_Init();
   delay(100);
@@ -139,168 +139,16 @@ void setup()
 void loop() 
 //*****************************************************
 {
-  // We run a finite-state machine that cycles through cases of waiting for
-  // a period of non motion, detecting a sudden motion, waiting until there
-  // is a change in brightness, and reporting the time passed in microseconds
-  // between the motion and the brightness change.
-  static enum { S_CALM, S_MOTION, S_BRIGHTNESS } state = S_CALM;
-  static unsigned long start;
-  static int initial_brightness;
-  
-  switch (state) {
-    case S_CALM:
-      {
-        // Wait for a period of at least 100 cycles where there is no motion above
-        // the motion threshold.
-        static int calm_cycles = 0;
-        if (moving2()) {
-          calm_cycles = 0;
-        } if (++calm_cycles >= 50) {
-            state = S_MOTION;
-            calm_cycles = 0;
-        } else {
-          // Make sure we stay calm for a while (half a second)
-          delay(10);
-        }
-      }
-      break;
-
-    case S_MOTION:
-      {
-        // Wait for a sudden motion.  When we find it, record the time in microseconds
-        // so we can compare it to when the brightness changes.  Also record the brightness
-        // so we can look for changes.
-        if (moving2()) {
-          start = micros();
-          initial_brightness = analogRead(A0);
-          state = S_BRIGHTNESS;
-#ifdef VERBOSE
-          Serial.print("Moving\n");
-#endif
-        }
-      }
-      break;
-
-    case S_BRIGHTNESS:
-      {
-        // Wait for a change in brightness compared to the original value that
-        // passes a threshold.  When we get it, report the latency.
-        // If it takes too long, then we time out and start over.
-        int brightness = analogRead(A0);
-        unsigned long now = micros();
-        
-        // Keep track of how many values we got for odd and even rows and
-        // compute a running average when we get a full complement for each.
-        // Ignore timeout values
-        if (abs(brightness - initial_brightness) > BRIGHTNESS_CHANGE_THRESHOLD) {
-          // Print the result for this time
-          Serial.print(now - start);
-          Serial.print("\n");
-          if (count % 2 == 0) {
-            odd_count++;  // This is the first one (zero indexed) or off by twos
-          } else {
-            even_count++;
-          }
-          delays[count++] = now - start;
-          state = S_CALM;
-        } else if (now - start > TIMEOUT_USEC) {
-          Serial.print("Timeout: no brightness change after motion, restarting\n");
-          // We don't increment the counter and we set the reading to 0 so we ignore it.
-          delays[count++] = 0;
-          state = S_CALM;
-        }
-
-        // See if it is time to print the average result.          
-        if (count == NUM_DELAYS) {
-          unsigned long even_average = 0;
-          unsigned long odd_average = 0;
-          for (int i = 0; i < NUM_DELAYS/2; i++) {
-            odd_average += delays[2*i];
-            even_average += delays[2*i+1];
-          }
-          
-          odd_average /= odd_count;
-          Serial.print("Average of last ");
-          Serial.print(NUM_DELAYS/2);
-          Serial.print(" odd counts (ignoring timeouts) = ");
-          Serial.print(odd_average);
-          Serial.print("\n");
-          even_average /= even_count;
-          Serial.print("Average of last ");
-          Serial.print(NUM_DELAYS/2);
-          Serial.print(" even counts (ignoring timeouts) = ");
-          Serial.print(even_average);
-          Serial.print("\n");
-          
-          count = 0;
-          odd_count = 0;
-          even_count = 0;
-        }
-      }
-      break;
-   
-    default:
-      Serial.print("Error: Unrecognized state; restarting\n");
-      break;
-  }
-}
-
-
-// Determine whether we're undergoing acceleration or rotation.
-// Does this by comparing the gyros to a threshold and
-// comparing accelerations to see if they are changing.
-//*****************************************************
-inline bool moving(void)
-//*****************************************************
-{
-  byte accX, accY, accZ;
-  byte gyroX, gyroY, gyroZ;
-  getAccelerometerAndGyroHighCounts(accX, accY, accZ, gyroX, gyroY, gyroZ);
-  
-  // If the gyros are above threshold, then we're moving.
-  if (gyroX > GYRO_THRESHOLD) { return true; }
-  if (gyroY > GYRO_THRESHOLD) { return true; }
-  if (gyroZ > GYRO_THRESHOLD) { return true; }
-  
-  // See if the accelerations are sufficiently different from the
-  // ones we read last time.  If so, we're moving.
-  static int prevX = 0;
-  static int prevY = 0;
-  static int prevZ = 0;
-  bool ret = false;
-  if ( abs(accX - prevX) > ACCEL_CHANGE_THRESHOLD ) {
-    ret = true;
-  }
-  if ( abs(accY - prevY) > ACCEL_CHANGE_THRESHOLD ) {
-    ret = true;
-  }
-  if ( abs(accZ - prevZ) > ACCEL_CHANGE_THRESHOLD ) {
-    ret = true;
-  }
-  prevX = accX;
-  prevY = accY;
-  prevZ = accZ;
-
-  return ret;  
-}
-
-// Determine whether we're undergoing acceleration or rotation.
-// Does this by comparing the gyros to a threshold and
-// comparing accelerations to see if they are changing.
-//*****************************************************
-inline bool moving2(void)
-//*****************************************************
-{
-  bool ret = false;
-  
-  int accX, accY, accZ;
-  int gyroX, gyroY, gyroZ;
-  accX = getXAccelerometerCounts();
-  accY = getYAccelerometerCounts();
-  accZ = getZAccelerometerCounts();
-  gyroX = getXGyroCounts();
-  gyroY = getYGyroCounts();
-  gyroZ = getZGyroCounts();
+  // Read the values from the inertial sensors and photosensor.
+  // Record the time we read these values.
+  int accX = getXAccelerometerCounts();
+  int accY = getYAccelerometerCounts();
+  int accZ = getZAccelerometerCounts();
+  int gyroX = getXGyroCounts();
+  int gyroY = getYGyroCounts();
+  int gyroZ = getZGyroCounts();
+  int brightness = analogRead(A0);
+  unsigned long now = micros();
   
 #ifdef VERBOSE2
   /* Debugging info to help figure out what the thresholds should be */
@@ -313,22 +161,256 @@ inline bool moving2(void)
   Serial.print(", "); Serial.print(analogRead(A0));
   Serial.print("\n");
   delay(1000);
-#endif
+#endif  
+  
+  // Keep track of the reversals in brightness and the time at
+  // which the brightness reached within threshold of the value
+  // it held before the inverted jump.  We keep track of the
+  // previous change away from threshold and check it against
+  // a current change to see if the polarities are in the opposite
+  // direction.  If so, then we set last_brightness_reach_end_time to
+  // now.  Brightness change direction and last brightness to
+  // reach the end should both be set to 0 when entering the
+  // S_REVERSE_BRIGHTNESS state.
+  static int last_brightness_change_direction = 0;
+  static unsigned long int last_brightness_reach_end_time = 0;
+
+  // Keep track of when the last time the gyroscope's motion
+  // dropped below threshold.  Used by the brightness state to
+  // determine latency.  Set to 0 when entering the S_REVERSE_DIRECTION
+  // state.
+  static unsigned long last_gyroscope_settling_time = 0;
+  
+  // We run a finite-state machine that cycles through cases of waiting for
+  // a period of non motion, determining the axis and brightness direction
+  // associated with motion, looking for extrema of motion, looking for
+  // extrema of brightness, and reporting statistics.
+  static enum { S_CALM, S_CALIBRATE, S_REVERSE_DIRECTION, 
+                S_REVERSE_BRIGHTNESS } state = S_CALM;
+  static unsigned long calm_start = now;
+  static unsigned long calibration_start = now;
+  
+  // Which axis to use for tracking the motion?  Initially set to
+  // NULL and then set in the calibration code to the axis with the
+  // largest motion.
+  static int *tracking_axis = NULL;
+  
+  // Statistics of latencies.
+  static int latency_count = 0;
+  static unsigned long latency_sum = 0;
+  static unsigned long latency_max = 0;
+  static unsigned long latency_min = TIMEOUT_USEC;
+  
+  // Whether or not we're in calm mode, if we hold still for the
+  // timeout duration, we reset statistics and go into calibrate
+  // mode.
+  if (moving(accX, accY, accZ, gyroX, gyroY, gyroZ)) {
+    calm_start = now;
+  } else if (now - calm_start >= TIMEOUT_USEC) {
+    if (latency_count > 0) {
+      Serial.print("Min latency: "); Serial.print(latency_min); Serial.print("\n");
+      Serial.print("Max latency: "); Serial.print(latency_max); Serial.print("\n");
+      Serial.print("Mean latency: "); Serial.print(latency_sum/latency_count); Serial.print("\n");
+    }
+    Serial.print("Statistics reset.  Initiate periodic motion to calibrate.\n");
+    
+    latency_count = 0;
+    latency_sum = 0;
+    latency_max = 0;
+    latency_min = TIMEOUT_USEC;
+    
+    calm_start = now;
+    calibration_start = now;
+    tracking_axis = NULL;
+    state = S_CALIBRATE;
+  }
+  
+  switch (state) {
+    // Wait for a period where there is no motion above
+    // the motion threshold.
+    case S_CALM:
+      {
+        // Nothing extra to do; we're always checking for calm above.
+      }
+      break;
+      
+    // Determine which of the rotational axes is moving the most and
+    // then wait for the start of a move in the direction that makes
+    // the photosensor brighter.
+    case S_CALIBRATE:
+      {
+        // The first loop iteration, we reset our variables.
+        static int minX, maxX, minY, maxY, minZ, maxZ;
+        static int minBright, maxBright;
+        if (calibration_start == now) {
+          minX = maxX = gyroX;
+          minY = maxY = gyroY;
+          minZ = maxZ = gyroZ;
+          minBright = maxBright = brightness;
+        }
+        
+        // Keep track of the maximum and minimum in all 3 axes;
+        if (gyroX < minX) { minX = gyroX; }
+        if (gyroX > maxX) { maxX = gyroX; }
+        if (gyroY < minY) { minY = gyroY; }
+        if (gyroY > maxY) { maxY = gyroY; }
+        if (gyroZ < minZ) { minZ = gyroZ; }
+        if (gyroZ > maxZ) { maxZ = gyroZ; }
+        if (brightness < minBright) { minBright = brightness; }
+        if (brightness > maxBright) { maxBright = brightness; }
+        
+        // If it has been long enough, and the tracking axis has not yet been
+        // set, set it to the one that has the largest range.
+        // First, check to make sure we've seen sufficient change in the
+        // maximum axis and in the brightness.
+        if ( (tracking_axis == NULL) && (now - calibration_start >= CALIBRATE_USEC) ) {
+          int maxRange = maxX - minX;
+          tracking_axis = &gyroX;
+          int yRange = maxY - minY;
+          if (yRange > maxRange) {
+            maxRange = yRange;
+            tracking_axis = &gyroY;
+          }
+          int zRange = maxZ - minZ;
+          if (zRange > maxRange) {
+            maxRange = zRange;
+            tracking_axis = &gyroZ;
+          }
+          if ( (maxRange < GYRO_CALIBRATION_THRESHOLD) ||
+               (maxBright - minBright < BRIGHTNESS_CALIBRATION_THRESHOLD) ) {
+            Serial.print("Insufficient change for calibrating, retrying\n");
+            Serial.print("  Gyroscope difference = ");
+            Serial.print(maxRange);
+            Serial.print("\n");
+            Serial.print("  Brightness difference = ");
+            Serial.print(maxBright - minBright);
+            Serial.print("\n");
+            tracking_axis = NULL;
+            calibration_start = now;
+          } else {
+            // We have not yet dropped below motion threshold
+            // for this iteration.
+            last_gyroscope_settling_time = 0;
+            state = S_REVERSE_DIRECTION;
+            Serial.print("Calibration complete, measuring latencies on ");
+            if (tracking_axis == &gyroX) {
+              Serial.print(" X axis");
+            } else if (tracking_axis == &gyroY) {
+              Serial.print(" Y axis");
+            } else {
+              Serial.print(" Z axis");
+            }
+            Serial.print(" (brightness difference ");
+            Serial.print(maxBright - minBright);
+            Serial.print("\n");
+            Serial.print("Continue periodic motion to test latency.\n");
+          }
+        }
+      }
+      break;
+
+    // Wait until the motion settles down (so that we were moving
+    // but now have stopped.
+    case S_REVERSE_DIRECTION:
+      {
+        // Keep track of when the gyroscope value most recently
+        // dropped below threshold (was above threshold in the previous
+        // time step and dropped below threshold this time).
+        static int last_gyroscope_value = 0;
+        if (tracking_axis != NULL) {
+          if ( (gyro_direction(*tracking_axis) == 0) &&
+               (gyro_direction(last_gyroscope_value) != 0) ) {
+            last_gyroscope_settling_time = now;
+          }
+          last_gyroscope_value = *tracking_axis;
+        } else {
+          last_gyroscope_value = 0;
+        }
+  
+        if (last_gyroscope_settling_time != 0) {
+          // Flush the change status so that we have to get a change in one direction
+          // followed by a change in the other starting now.
+          last_brightness_reach_end_time = 0;
+          last_brightness_change_direction = 0;
+          state = S_REVERSE_BRIGHTNESS;
+        }
+      }
+      break;
+
+    // Wait until the brightness changes direction and then report
+    // the time difference between when motion dropped below
+    // threshold and when brightness came within threshold of its
+    // extreme value before reversing direction.
+    case S_REVERSE_BRIGHTNESS:
+      {
+        static int last_unchanged_brightness_value = 0;
+        static unsigned long last_brightness_change_time = 0;
+        int this_change = brightness_direction(brightness - last_unchanged_brightness_value);
+        if (this_change != 0) {
+          if (this_change * last_brightness_change_direction == -1) {
+            last_brightness_reach_end_time = last_brightness_change_time;
+          }
+          last_unchanged_brightness_value = brightness;
+          last_brightness_change_direction = this_change;
+          last_brightness_change_time = now;
+        }
+      
+        if (last_brightness_reach_end_time != 0) {
+          if (last_brightness_reach_end_time <= last_gyroscope_settling_time) {
+            Serial.print("Error: Inverted settling times: gyro settling time ");
+            Serial.print(last_gyroscope_settling_time);
+            Serial.print("\n");
+            state = S_CALM;
+          }
+          
+          // Print this value.
+          unsigned long value = last_brightness_reach_end_time - last_gyroscope_settling_time;
+          Serial.print(value);
+          Serial.print("\n");
+          
+          // Track statistics;
+          latency_count++;
+          if (value < latency_min) { latency_min = value; }
+          if (value > latency_max) { latency_max = value; }
+          latency_sum += value;
+          
+          last_gyroscope_settling_time = 0;
+          state = S_REVERSE_DIRECTION;
+        }
+      }
+      break;
+
+    default:
+      Serial.print("Error: Unrecognized state; restarting\n");
+      state = S_CALM;
+      break;
+  }
+}
+
+
+// Determine whether we're undergoing acceleration or rotation.
+// Does this by comparing the gyros to a threshold and
+// comparing accelerations to see if they are changing.
+//*****************************************************
+inline bool moving(int accX, int accY, int accZ, int gyroX, int gyroY, int gyroZ)
+//*****************************************************
+{
+  bool ret = false;
   
   // If the gyros are above threshold, then we're moving.
-  if (gyroX > GYRO_THRESHOLD) {
+  if (gyroX >= GYRO_THRESHOLD) {
 #ifdef VERBOSE
     Serial.print("gX\n");
 #endif
     ret = true;
   }
-  if (gyroY > GYRO_THRESHOLD) {
+  if (gyroY >= GYRO_THRESHOLD) {
 #ifdef VERBOSE
     Serial.print("gY\n");
 #endif
     ret = true;
   }
-  if (gyroZ > GYRO_THRESHOLD) {
+  if (gyroZ >= GYRO_THRESHOLD) {
 #ifdef VERBOSE
     Serial.print("gZ\n");
 #endif
@@ -340,19 +422,19 @@ inline bool moving2(void)
   static int prevX = 0;
   static int prevY = 0;
   static int prevZ = 0;
-  if ( abs(accX - prevX) > ACCEL_CHANGE_THRESHOLD ) {
+  if ( abs(accX - prevX) >= ACCEL_CHANGE_THRESHOLD ) {
 #ifdef VERBOSE
     Serial.print("aX\n");
 #endif
     ret = true;
   }
-  if ( abs(accY - prevY) > ACCEL_CHANGE_THRESHOLD ) {
+  if ( abs(accY - prevY) >= ACCEL_CHANGE_THRESHOLD ) {
 #ifdef VERBOSE
     Serial.print("aY\n");
 #endif
     ret = true;
   }
-  if ( abs(accZ - prevZ) > ACCEL_CHANGE_THRESHOLD ) {
+  if ( abs(accZ - prevZ) >= ACCEL_CHANGE_THRESHOLD ) {
 #ifdef VERBOSE
     Serial.print("aZ\n");
 #endif
@@ -361,29 +443,44 @@ inline bool moving2(void)
   prevX = accX;
   prevY = accY;
   prevZ = accZ;
-#undef VERBOSE
 
   return ret;  
 }
 
+// Determine if we are moving in the positive direction above
+// threshold (1), in the negative direction below threshold (-1),
+// or within threshold of the origin (0);
 //*****************************************************
-  // We only read the high-order bytes for two reasons:
-  // 1) Speed.
-  // 2) To avoid getting a measurement whose upper and lower bytes are
-  // inconsisent.
-  // XXX However, this routine did not work.  It is not clear why it
-  // did not, but switching back to using the original read routines
-  // through the moving2() call.
-inline void getAccelerometerAndGyroHighCounts(byte &accX, byte &accY, byte &accZ,
-                                       byte &gyroX, byte &gyroY, byte &gyroZ)
+inline int gyro_direction(int value)
 //*****************************************************
 {
-    accX = readRegister(ACCEL_XOUT_H);
-    accY = readRegister(ACCEL_YOUT_H);
-    accZ = readRegister(ACCEL_ZOUT_H);
-    gyroX = readRegister(GYRO_XOUT_H);
-    gyroY = readRegister(GYRO_YOUT_H);
-    gyroZ = readRegister(GYRO_ZOUT_H);
+  if (value >= GYRO_THRESHOLD) {
+    return 1;
+  }
+  
+  if (value <= -GYRO_THRESHOLD) {
+    return -1;
+  }
+  
+  return 0;
+}
+
+// Determine if we brightness changed in the positive direction above
+// threshold (1), in the negative direction below threshold (-1),
+// or not (0);
+//*****************************************************
+inline int brightness_direction(int value)
+//*****************************************************
+{
+  if (value >= BRIGHTNESS_THRESHOLD) {
+    return 1;
+  }
+  
+  if (value <= -BRIGHTNESS_THRESHOLD) {
+    return -1;
+  }
+  
+  return 0;
 }
 
 //*****************************************************

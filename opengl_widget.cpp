@@ -116,8 +116,16 @@ void OpenGL_Widget::useVRPNTracker(QString name, int sensor, double transThresh,
     d_tracker->register_change_handler(this, handleTracker, sensor);
     d_tracker_trans_thresh = transThresh;
     d_tracker_rot_thresh = rotThresh;
+    d_tracker_rotate_axis = -1; // Disable rotation.
     d_tracker_last_trigger.tv_sec = 0;
     d_tracker_last_trigger.tv_sec = 0;
+}
+
+void OpenGL_Widget::useVRPNTrackerRotate(QString name, int sensor, int whichAxis)
+{
+    d_tracker = new vrpn_Tracker_Remote(name.toStdString().c_str());
+    d_tracker->register_change_handler(this, handleTracker, sensor);
+    d_tracker_rotate_axis = whichAxis;
 }
 
 void OpenGL_Widget::idle(void)
@@ -384,6 +392,59 @@ void VRPN_API OpenGL_Widget::handleTracker(void *userdata, vrpn_TRACKERCB info)
 
     struct timeval now;
     vrpn_gettimeofday(&now, NULL);
+
+    //=======================================================================
+    // If we're doing a rotation based on an axis, keep a running average of the
+    // mean and standard deviation of recent measurements and adjust the brightness
+    // to track within it.
+    if ((me->d_tracker_rotate_axis >= 0) && (me->d_tracker_rotate_axis <= 2)) {
+
+        // Convert the tracker's quaternion into Euler angles.  Then pull out
+        // the appropraite Euler component (0, 1, or 2) so we can base our
+        // calculations in it.
+        q_vec_type yawPitchRoll;
+        q_to_euler(yawPitchRoll, info.quat);
+        double value = yawPitchRoll[me->d_tracker_rotate_axis];
+
+        // Keep running statistics on the recent values on this axis, so
+        // we can adapt to changing motion patterns over time.  Compute the
+        // mean and standard deviation of motions along this axis for a
+        // maximum of 400 reports.  If we don't have enough measurements
+        // to compute standard deviation, bail.
+        me->d_tracker_rotations.push_back(value);
+        if (me->d_tracker_rotations.size() > 200) {
+            me->d_tracker_rotations.pop_front();
+        }
+        if (me->d_tracker_rotations.size() < 2) {
+            return;
+        }
+        std::list<double>::const_iterator it;
+        double sum = 0, sq_sum = 0;
+        for (it = me->d_tracker_rotations.begin();
+             it != me->d_tracker_rotations.end(); it++) {
+            sum += *it;
+            sq_sum += (*it)*(*it);
+        }
+        double mean = sum / me->d_tracker_rotations.size();
+        double variance = sq_sum / me->d_tracker_rotations.size() - mean*mean;
+        double std = sqrt(variance);
+
+        // Adjust the background brightness based on how far the measured
+        // value is above or below the mean to try and keep the color getting
+        // brighter as long as it is increasing and darker as long as it decreasing.
+        const double EMPERICAL_CONSTANT = 0.2;
+        double scaled = 127 + 255 * EMPERICAL_CONSTANT * (value - mean) / std;
+        if (scaled < 0) { scaled = 0; }
+        if (scaled > 255) { scaled = 255; }
+        printf("XXX Mean %lg, std, %lg, scaled %lg\n", mean, std, scaled);
+        me->d_clearColor = QColor(scaled, scaled, scaled);
+
+        return;
+    }
+
+    //=======================================================================
+    // Not doing rotation, but rather bright/dark background based on a
+    // motion threshold in translation or rotation.
 
     // If we haven't yet had a value set (time = 0),
     // don't check for changes, just update the location and

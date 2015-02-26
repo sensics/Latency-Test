@@ -7,6 +7,7 @@ MainWindow::MainWindow(bool fullscreen
     , QString buttonName, int whichButton
     , QString analogName, int whichAnalog, double anaThresh
     , QString trackerName, int whichSensor, double transThresh, double rotThresh
+    , bool doTrackerRotation, int rotateAxis
     , QWidget *parent)
   : QMainWindow(parent)
     , ui(new Ui::MainWindow)
@@ -38,7 +39,12 @@ MainWindow::MainWindow(bool fullscreen
         ui->widget->useVRPNAnalog(analogName, whichAnalog, anaThresh);
     }
     if (trackerName.length() > 0) {
-        ui->widget->useVRPNTracker(trackerName, whichSensor, transThresh, rotThresh);
+        if (doTrackerRotation) {
+            ui->widget->useVRPNTrackerRotate(trackerName, whichSensor, rotateAxis);
+        }
+        else {
+            ui->widget->useVRPNTracker(trackerName, whichSensor, transThresh, rotThresh);
+        }
     }
     if (numQuads > 0) {
         ui->widget->setNumQuads(numQuads);
