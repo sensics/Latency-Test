@@ -84,6 +84,11 @@ OpenGL_Widget::OpenGL_Widget(QWidget *parent)
     d_num_quads = 1;
     d_vertex_array = NULL;
     updateVertexArray();
+
+    // Set the minimum and maximum rotations such that they
+    // will be overridden by any valid readings.
+    d_tracker_min_rotation = 1e10;
+    d_tracker_max_rotation = -1e10;
 }
 
 OpenGL_Widget::~OpenGL_Widget()
@@ -197,7 +202,7 @@ void OpenGL_Widget::paintGL()
     // Draw instructions on the screen.  This will provide additional rendering load,
     // but it did not change the results in our early testing.
     glColor3f(1,1,1);
-    renderText(30, 30, "OSVR 2D vs. 3D rendering latency test program version 02.00.00 (run with -fullscreen to remove borders)");
+    renderText(30, 30, "OSVR 2D vs. 3D rendering latency test program version 03.00.00 (run with -fullscreen to remove borders)");
     renderText(50, 50, "Press + to increase oscillation");
     renderText(50, 70, "Press - to decrease oscillation");
     renderText(50, 90, "Until you find the slowest oscillation where the cursor and square are in phase");
@@ -406,37 +411,15 @@ void VRPN_API OpenGL_Widget::handleTracker(void *userdata, vrpn_TRACKERCB info)
         q_to_euler(yawPitchRoll, info.quat);
         double value = yawPitchRoll[me->d_tracker_rotate_axis];
 
-        // Keep running statistics on the recent values on this axis, so
-        // we can adapt to changing motion patterns over time.  Compute the
-        // mean and standard deviation of motions along this axis for a
-        // maximum of 400 reports.  If we don't have enough measurements
-        // to compute standard deviation, bail.
-        me->d_tracker_rotations.push_back(value);
-        if (me->d_tracker_rotations.size() > 200) {
-            me->d_tracker_rotations.pop_front();
-        }
-        if (me->d_tracker_rotations.size() < 2) {
-            return;
-        }
-        std::list<double>::const_iterator it;
-        double sum = 0, sq_sum = 0;
-        for (it = me->d_tracker_rotations.begin();
-             it != me->d_tracker_rotations.end(); it++) {
-            sum += *it;
-            sq_sum += (*it)*(*it);
-        }
-        double mean = sum / me->d_tracker_rotations.size();
-        double variance = sq_sum / me->d_tracker_rotations.size() - mean*mean;
-        double std = sqrt(variance);
+        // Find the minimum and maximum rotation we've encountered.
+        if (value < me->d_tracker_min_rotation) { me->d_tracker_min_rotation = value; }
+        if (value > me->d_tracker_max_rotation) { me->d_tracker_max_rotation = value; }
 
-        // Adjust the background brightness based on how far the measured
-        // value is above or below the mean to try and keep the color getting
-        // brighter as long as it is increasing and darker as long as it decreasing.
-        const double EMPERICAL_CONSTANT = 0.2;
-        double scaled = 127 + 255 * EMPERICAL_CONSTANT * (value - mean) / std;
-        if (scaled < 0) { scaled = 0; }
-        if (scaled > 255) { scaled = 255; }
-        printf("XXX Mean %lg, std, %lg, scaled %lg\n", mean, std, scaled);
+        // Adjust the background brightness based on where we are with
+        // respect to the minimum and maximum rotations
+        double range = me->d_tracker_max_rotation - me->d_tracker_min_rotation;
+        if (range == 0) { return; }
+        double scaled = 255 * (value - me->d_tracker_min_rotation) / range;
         me->d_clearColor = QColor(scaled, scaled, scaled);
 
         return;

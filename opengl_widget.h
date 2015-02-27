@@ -91,7 +91,8 @@ private:
     vrpn_float64 d_last_analog_value; //< Last analog value we read
     vrpn_float64 d_analog_threshold;  //< Threshold value triggering a change
     int d_tracker_rotate_axis;        //< Which axis to color based on rotation, -1 for none
-    std::list<double> d_tracker_rotations;  //< Keeps track of recent rotations.
+    double d_tracker_min_rotation;    //< Keeps track of range of rotations
+    double d_tracker_max_rotation;    //< Keeps track of range of rotations
     struct timeval d_analog_last_trigger;   //< When did we last trigger?
     vrpn_Tracker_Remote *d_tracker; //< If we are using a VRPN tracker, non-null
     double d_tracker_trans_thresh;  //< Threshold of translation to trigger
