@@ -1,3 +1,18 @@
+/** @file
+@brief Header
+
+@date 2015
+
+@author
+Russell Taylor
+<russ@reliasolve.com>
+<http://sensics.com>
+*/
+
+// Copyright 2015 Sensics, Inc.
+//
+// (Licensed under the Apache License, Version 2.0)
+
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include <QDesktopWidget>
