@@ -103,8 +103,10 @@ const int READ_FLAG =0x80;   //128 has to be added to the address register
 #define	BIT_RAW_RDY_EN		    0x01
 #define	BIT_I2C_IF_DIS              0x10
 
+// Debugging definitions.
 #undef VERBOSE
 #undef VERBOSE2
+#define PRINT_TRACE
 
 // pins used for the connection with the sensor
 // the other you need are controlled by the SPI library):
@@ -113,21 +115,32 @@ const int chipSelectPin = 10;
 // Thresholds
 const int ACCEL_CHANGE_THRESHOLD = 500;
 const int GYRO_THRESHOLD = 300;
-const int BRIGHTNESS_THRESHOLD = 3;
+const int GYRO_MIN_SPEED_THRESHOLD = 2000;
+const int BRIGHTNESS_THRESHOLD = 10;
 const int GYRO_CALIBRATION_THRESHOLD = 1000;
 const int BRIGHTNESS_CALIBRATION_THRESHOLD = 10;
 const unsigned long TIMEOUT_USEC = 2000000L;
 const unsigned long CALIBRATE_USEC = 1000000L;
+
+// Arrays to hold measurements surrounding the reversal for debugging
+#ifdef PRINT_TRACE
+const int TRACE_SIZE = 250;
+const int TRACE_SKIP = 5;
+static int trace_count = 0;
+static int trace_skip_count = 0;
+char trace_gyroY[TRACE_SIZE];
+unsigned char trace_bright[TRACE_SIZE];
+#endif
 
 //*****************************************************
 void setup() 
 //*****************************************************
 {
   Serial.begin(9600);
-  Serial.print("OSVR_latency_hardware_firmware turnaround test v01.00.00\n");
+  Serial.print("OSVR_latency_hardware_firmware turnaround test v01.01.00\n");
   Serial.print(" Mount the photosensor rigidly on the eyepiece or screen.\n");
   Serial.print(" Rotate the inertial sensor along with the tracking hardware.\n");
-  Serial.print(" Make the app change very brightness darker in one direction and lighter in the other.\n");
+  Serial.print(" Make the app vary brightness darker in one direction and lighter in the other.\n");
   Serial.print(" Latencies reported in microseconds, 2-second timeout\n");
   Serial.print(" Hold the device still for 2 seconds.\n");
   
@@ -171,7 +184,8 @@ void loop()
   // direction.  If so, then we set last_brightness_reach_end_time to
   // now.  Brightness change direction and last brightness to
   // reach the end should both be set to 0 when entering the
-  // S_REVERSE_BRIGHTNESS state.
+  // S_REVERSE_BRIGHTNESS state so that they will have to be
+  // filled in by actual changes.
   static int last_brightness_change_direction = 0;
   static unsigned long int last_brightness_reach_end_time = 0;
 
@@ -224,6 +238,19 @@ void loop()
     tracking_axis = NULL;
     state = S_CALIBRATE;
   }
+  
+#ifdef PRINT_TRACE
+  if ( (state != S_CALIBRATE) && (state != S_CALM) ) {
+    if (++trace_skip_count >= TRACE_SKIP) {
+      trace_skip_count = 0;
+      if (trace_count < TRACE_SIZE) {
+        trace_gyroY[trace_count] = gyroY/100;
+        trace_bright[trace_count] = brightness/4;        
+        trace_count++;
+      }
+    }
+  } 
+#endif
   
   switch (state) {
     // Wait for a period where there is no motion above
@@ -294,15 +321,15 @@ void loop()
             state = S_REVERSE_DIRECTION;
             Serial.print("Calibration complete, measuring latencies on ");
             if (tracking_axis == &gyroX) {
-              Serial.print(" X axis");
+              Serial.print("X axis");
             } else if (tracking_axis == &gyroY) {
-              Serial.print(" Y axis");
+              Serial.print("Y axis");
             } else {
-              Serial.print(" Z axis");
+              Serial.print("Z axis");
             }
             Serial.print(" (brightness difference ");
             Serial.print(maxBright - minBright);
-            Serial.print("\n");
+            Serial.print(")\n");
             Serial.print("Continue periodic motion to test latency.\n");
           }
         }
@@ -313,12 +340,22 @@ void loop()
     // but now have stopped.
     case S_REVERSE_DIRECTION:
       {
+        // Don't say that we were moving until we get to a speed that
+        // is above a larger threshold to keep us from getting lots
+        // of spurious false stopping estimates.
+        static bool have_moved_fast = false;
+        
         // Keep track of when the gyroscope value most recently
         // dropped below threshold (was above threshold in the previous
         // time step and dropped below threshold this time).
         static int last_gyroscope_value = 0;
         if (tracking_axis != NULL) {
-          if ( (gyro_direction(*tracking_axis) == 0) &&
+          if ( (*tracking_axis > GYRO_MIN_SPEED_THRESHOLD) ||
+               (*tracking_axis < -GYRO_MIN_SPEED_THRESHOLD) ) {
+                 have_moved_fast = true;
+          }
+          if ( have_moved_fast &&
+               (gyro_direction(*tracking_axis) == 0) &&
                (gyro_direction(last_gyroscope_value) != 0) ) {
             last_gyroscope_settling_time = now;
           }
@@ -328,8 +365,16 @@ void loop()
         }
   
         if (last_gyroscope_settling_time != 0) {
-          // Flush the change status so that we have to get a change in one direction
-          // followed by a change in the other starting now.
+          //Serial.print("Stopped\n");
+          
+          // We have dropped to a stop, so we need to set the trigger for
+          // moving fast again and make sure we actually move before the
+          // last gyro value registers a move.
+          have_moved_fast = false;
+          last_gyroscope_value = 0;
+
+          // Flush the change status so that we have to get a brightness change
+          // in one direction followed by a change in the other starting now.
           last_brightness_reach_end_time = 0;
           last_brightness_change_direction = 0;
           state = S_REVERSE_BRIGHTNESS;
@@ -349,6 +394,17 @@ void loop()
         if (this_change != 0) {
           if (this_change * last_brightness_change_direction == -1) {
             last_brightness_reach_end_time = last_brightness_change_time;
+            /*
+            if (this_change == -1) {
+              Serial.print(" +");
+            } else {
+              Serial.print(" -");
+            }
+            Serial.print(last_unchanged_brightness_value);
+            Serial.print("->");
+            Serial.print(brightness);
+            Serial.print("\n");
+            */
           }
           last_unchanged_brightness_value = brightness;
           last_brightness_change_direction = this_change;
@@ -359,15 +415,25 @@ void loop()
           if (last_brightness_reach_end_time <= last_gyroscope_settling_time) {
             Serial.print("Error: Inverted settling times: gyro settling time ");
             Serial.print(last_gyroscope_settling_time);
-            Serial.print("\n");
+            Serial.print(" (resetting)\n");
             state = S_CALM;
           }
-          
-          // Print this value.
+
+#ifdef PRINT_TRACE
+          Serial.print("GyroY/100*100,brightness/4*4\n");
+          for (int i = 0; i < trace_count; i++) {
+            Serial.print(static_cast<int>(trace_gyroY[i])*10);
+            Serial.print(",");
+            Serial.print(static_cast<int>(trace_bright[i])*4);
+            Serial.print("\n");
+          }
+          Serial.print("\n");
+          trace_count = 0;
+#endif     
           unsigned long value = last_brightness_reach_end_time - last_gyroscope_settling_time;
           Serial.print(value);
           Serial.print("\n");
-          
+
           // Track statistics;
           latency_count++;
           if (value < latency_min) { latency_min = value; }
