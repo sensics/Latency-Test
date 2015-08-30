@@ -15,7 +15,7 @@ const int numAnalogs = 4;
 void setup() 
 //*****************************************************
 {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   // initialize digital pin 13 as an output.
   pinMode(LED_PIN, OUTPUT);  
