@@ -45,7 +45,9 @@ void setup()
   // can.
   Serial.begin(115200);
   
-  // Set the timeout on input-string parsing to 1ms.
+  // Set the timeout on input-string parsing to 1ms, so we
+  // don't waste a lot of time waiting for the completion of
+  // numbers.
   Serial.setTimeout(1);
 }
 
