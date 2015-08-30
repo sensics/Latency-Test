@@ -5,7 +5,8 @@
 
 // This program is meant to be paired with the VRPN.org device
 // vrpn_Sensics_streaming_arduino device, which will send the appropriate
-// commands to control it and read back its results.
+// commands to control it and read back its results.  The program can also
+// be run from the serial monitor or from any serial program as well.
 
 // It prints the analog input from a set of analogs as quickly as possible,
 // with the number of analogs read from the serial line at program start.
@@ -16,7 +17,8 @@
 // how many analogs to be read.  The number must be between 1 and 8.
 //   Optional: numeric marker commands, each followed by a carriage return
 // indicating a host-side event to be correlated with the analog data.  These
-// are inserted into the output stream and returned.
+// are inserted into the output stream and returned.  Markers must be larger
+// than 0.
 
 // OUTPUT: Streaming lines.  Each line consists of:
 //   (1) A list of comma-separated ASCII values starting with Analog0
@@ -25,14 +27,26 @@
 //   (2) An optional list of numeric event markers that were sent across
 // the serial line that were received since the last report.
 
-// Initialize to an invalid value
+// Initialize the number of analogs to an invalid value so the
+// user has to specify this before we start.
 int numAnalogs = 0;
+
+// An array of markers that can be filled in and will be reported
+// at the next sending event.
+int  numMarkers = 0;
+const int maxMarkers = 100;
+int markers[maxMarkers];
 
 //*****************************************************
 void setup() 
 //*****************************************************
 {
+  // Set the communication speed on the serial port to the fastest we
+  // can.
   Serial.begin(115200);
+  
+  // Set the timeout on input-string parsing to 1ms.
+  Serial.setTimeout(1);
 }
 
 //*****************************************************
@@ -53,7 +67,14 @@ void readAndParseInput()
   // We already have our analogs specified, so this is
   // a marker request.  Add it to the array of outstanding
   // requests.
-  // XXX
+  while (Serial.available() > 0) {
+    int newMarker = Serial.parseInt();
+    if (newMarker > 0) {
+      if (numMarkers == maxMarkers) { return; }
+      markers[numMarkers] = newMarker;
+      numMarkers++;
+    }
+  }
 }
 
 //*****************************************************
@@ -67,6 +88,12 @@ void loop()
       Serial.print(",");
       Serial.print(analogRead(i));
     }
+    int i;
+    for (i = 0; i < numMarkers; i++) {
+      Serial.print(",");
+      Serial.print(markers[i]);
+    }
+    numMarkers = 0;
     Serial.print("\n");
   }
 }//end loop
