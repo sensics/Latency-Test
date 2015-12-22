@@ -252,44 +252,6 @@ void loop()
 // Does this by comparing the gyros to a threshold and
 // comparing accelerations to see if they are changing.
 //*****************************************************
-inline bool moving(void)
-//*****************************************************
-{
-  byte accX, accY, accZ;
-  byte gyroX, gyroY, gyroZ;
-  getAccelerometerAndGyroHighCounts(accX, accY, accZ, gyroX, gyroY, gyroZ);
-  
-  // If the gyros are above threshold, then we're moving.
-  if (gyroX >= GYRO_THRESHOLD) { return true; }
-  if (gyroY >= GYRO_THRESHOLD) { return true; }
-  if (gyroZ >= GYRO_THRESHOLD) { return true; }
-  
-  // See if the accelerations are sufficiently different from the
-  // ones we read last time.  If so, we're moving.
-  static int prevX = 0;
-  static int prevY = 0;
-  static int prevZ = 0;
-  bool ret = false;
-  if ( abs(accX - prevX) >= ACCEL_CHANGE_THRESHOLD ) {
-    ret = true;
-  }
-  if ( abs(accY - prevY) >= ACCEL_CHANGE_THRESHOLD ) {
-    ret = true;
-  }
-  if ( abs(accZ - prevZ) >= ACCEL_CHANGE_THRESHOLD ) {
-    ret = true;
-  }
-  prevX = accX;
-  prevY = accY;
-  prevZ = accZ;
-
-  return ret;  
-}
-
-// Determine whether we're undergoing acceleration or rotation.
-// Does this by comparing the gyros to a threshold and
-// comparing accelerations to see if they are changing.
-//*****************************************************
 inline bool moving2(void)
 //*****************************************************
 {
@@ -461,6 +423,44 @@ int getZGyroCounts(void)
      return ((tempData_HI << 8) + tempData_LO);
 }//end func 
 
+
+// Determine whether we're undergoing acceleration or rotation.
+// Does this by comparing the gyros to a threshold and
+// comparing accelerations to see if they are changing.
+//*****************************************************
+inline bool moving(void)
+//*****************************************************
+{
+  byte accX, accY, accZ;
+  byte gyroX, gyroY, gyroZ;
+  getAccelerometerAndGyroHighCounts(accX, accY, accZ, gyroX, gyroY, gyroZ);
+  
+  // If the gyros are above threshold, then we're moving.
+  if (gyroX >= GYRO_THRESHOLD) { return true; }
+  if (gyroY >= GYRO_THRESHOLD) { return true; }
+  if (gyroZ >= GYRO_THRESHOLD) { return true; }
+  
+  // See if the accelerations are sufficiently different from the
+  // ones we read last time.  If so, we're moving.
+  static int prevX = 0;
+  static int prevY = 0;
+  static int prevZ = 0;
+  bool ret = false;
+  if ( abs(accX - prevX) >= ACCEL_CHANGE_THRESHOLD ) {
+    ret = true;
+  }
+  if ( abs(accY - prevY) >= ACCEL_CHANGE_THRESHOLD ) {
+    ret = true;
+  }
+  if ( abs(accZ - prevZ) >= ACCEL_CHANGE_THRESHOLD ) {
+    ret = true;
+  }
+  prevX = accX;
+  prevY = accY;
+  prevZ = accZ;
+
+  return ret;  
+}
 
 //Read from register
 //*****************************************************
